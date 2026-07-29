@@ -436,29 +436,42 @@ const ICON_CAMERA =
     '<circle cx="12" cy="12.5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.9"/>';
 
 if (onPhone()) {
-    let hereMarker = null;
+    const here = L.layerGroup().addTo(map);
 
     floatingButton({
         label: 'Ir para minha localização',
         icon: ICON_LOCATE,
-        onClick: () => map.locate({ setView: true, maxZoom: 13, enableHighAccuracy: true }),
+        // Sem teto de zoom: o Leaflet enquadra pela precisão do sinal, então um
+        // teto baixo mantinha o mapa afastado e a marca parecia fora de lugar.
+        onClick: () => map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true }),
     });
 
     map.on('locationfound', (event) => {
+        const metres = Math.round(event.accuracy);
+
+        here.clearLayers();
+
+        // O círculo é a margem de erro que o navegador declara. Sem ele, um sinal
+        // impreciso — Wi-Fi ou IP, com quilômetros de erro — apareceria como um
+        // ponto exato e faria a pessoa se localizar errado.
+        L.circle(event.latlng, {
+            radius: event.accuracy,
+            color: '#1f6feb',
+            weight: 1,
+            fillColor: '#1f6feb',
+            fillOpacity: 0.12,
+        }).addTo(here);
+
         // Marcador distinto dos pins de estação: é a pessoa, não uma medição.
-        if (hereMarker === null) {
-            hereMarker = L.circleMarker(event.latlng, {
-                radius: 7,
-                color: '#fff',
-                weight: 3,
-                fillColor: '#1f6feb',
-                fillOpacity: 1,
-            })
-                .addTo(map)
-                .bindTooltip('Você está aqui');
-        } else {
-            hereMarker.setLatLng(event.latlng);
-        }
+        L.circleMarker(event.latlng, {
+            radius: 7,
+            color: '#fff',
+            weight: 3,
+            fillColor: '#1f6feb',
+            fillOpacity: 1,
+        })
+            .addTo(here)
+            .bindTooltip(`Você está aqui · precisão de ${metres} m`);
     });
 
     // Falha de localização é estado visível: sem aviso, o botão parece quebrado.
