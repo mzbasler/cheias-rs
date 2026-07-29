@@ -34,22 +34,6 @@
 
     <main id="map" class="h-dvh" role="application" aria-label="Mapa das estações de medição"></main>
 
-    {{-- Coordenada e precisão à vista: é o que permite comparar com outro app e
-         localizar de onde vem um eventual desvio. --}}
-    <p id="locate-readout" class="locate-readout" aria-live="polite" hidden></p>
-
-    {{-- A precisão é decidida pelo sistema operacional antes de chegar ao
-         navegador. Quando vem grosseira, o que resta é dizer por quê. --}}
-    <div id="locate-coarse" class="locate-coarse" role="status" hidden>
-        <p><strong>Posição imprecisa.</strong> O navegador usou a rede, não o GPS.</p>
-        <ul>
-            <li>Conceda permissão <strong>precisa</strong>, não aproximada</li>
-            <li>Ative o GPS do aparelho</li>
-            <li>Abra a página em <strong>HTTPS</strong> — sem isso o GPS fica bloqueado</li>
-            <li>No computador não há GPS: a posição sempre vem da rede</li>
-        </ul>
-    </div>
-
     {{-- O envio de foto ainda não existe. Um botão que aceitasse a imagem e a
          descartasse faria alguém acreditar que pediu ajuda durante uma cheia. --}}
     <dialog id="photo-notice" class="disclaimer" aria-labelledby="photo-notice-title">

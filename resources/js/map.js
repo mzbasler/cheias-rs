@@ -435,30 +435,23 @@ const ICON_CAMERA =
     '<path d="M3 8.5A2.5 2.5 0 015.5 6h1.2l1-1.6A1 1 0 018.5 4h7a1 1 0 01.85.4L17.3 6h1.2A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>' +
     '<circle cx="12" cy="12.5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.9"/>';
 
-if (onPhone()) {
+// Localização vale em qualquer aparelho. Restringir ao celular obrigava a testar
+// dentro da emulação de dispositivo do DevTools, que substitui a posição real por
+// uma fixa — e era isso que fazia a marca cair sempre no mesmo lugar errado.
+{
     const here = L.layerGroup().addTo(map);
 
-    /**
-     * Precisão que georreferencia um relato: abaixo disto o fixo é de GPS e
-     * identifica a rua. Acima de COARSE_METRES a posição veio da rede e não
-     * localiza ninguém — é o limite que o envio de foto vai exigir.
-     */
+    /** Abaixo disto o fixo é de GPS e não vale seguir gastando bateria. */
     const GOOD_ENOUGH_METRES = 15;
-
-    const COARSE_METRES = 100;
 
     /**
      * GPS frio leva de 30 a 60 s para travar, e o primeiro fixo é sempre de rede.
-     * Cortar em 20 s desistia justamente antes de o GPS entrar.
      */
     const REFINE_TIMEOUT_MS = 60000;
 
     let centred = false;
     let bestAccuracy = Infinity;
     let giveUp = null;
-
-    const readout = document.getElementById('locate-readout');
-    const coarseNotice = document.getElementById('locate-coarse');
 
     function stopLocating() {
         map.stopLocate();
@@ -475,20 +468,19 @@ if (onPhone()) {
             clearTimeout(giveUp);
             giveUp = setTimeout(stopLocating, REFINE_TIMEOUT_MS);
 
-            readout.textContent = 'Localizando… aguarde o GPS';
-            readout.hidden = false;
-            coarseNotice.hidden = true;
-
-            // `watch` em vez de leitura única: o primeiro fixo do navegador vem da
-            // rede, com centenas de metros de erro, e o GPS só refina ao longo de
-            // alguns segundos. Pedir uma leitura só era o motivo da imprecisão.
-            map.locate({
-                watch: true,
-                setView: false,
-                enableHighAccuracy: true,
-                maximumAge: 0, // Sem posição de cache: fixo velho aponta onde a pessoa esteve.
-                timeout: REFINE_TIMEOUT_MS,
-            });
+            // No celular vale acompanhar o refinamento: o primeiro fixo vem da rede
+            // e o GPS entra depois. No desktop não há GPS para esperar.
+            map.locate(
+                onPhone()
+                    ? {
+                        watch: true,
+                        setView: false,
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: REFINE_TIMEOUT_MS,
+                    }
+                    : { setView: false, timeout: REFINE_TIMEOUT_MS },
+            );
         },
     });
 
@@ -501,21 +493,6 @@ if (onPhone()) {
 
         bestAccuracy = event.accuracy;
 
-        const metres = Math.round(event.accuracy);
-        const { lat, lng } = event.latlng;
-
-        // Coordenada crua à vista: é o que permite comparar com outro app e saber
-        // se o desvio vem do navegador ou daqui.
-        readout.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)} · ±${metres} m`;
-        readout.hidden = false;
-
-        // Posição grosseira não é posição. Dizer isso é melhor que desenhar um
-        // ponto de aparência exata a quilômetros de onde a pessoa está.
-        const coarse = metres > COARSE_METRES;
-
-        readout.dataset.coarse = String(coarse);
-        coarseNotice.hidden = !coarse;
-
         here.clearLayers();
 
         // Marcador distinto dos pins de estação: é a pessoa, não uma medição.
@@ -527,28 +504,24 @@ if (onPhone()) {
             fillOpacity: 1,
         })
             .addTo(here)
-            .bindTooltip(`Você está aqui · precisão de ${metres} m`);
+            .bindTooltip('Você está aqui');
 
-        // Enquadra pela margem de erro: fixo preciso aproxima, fixo ruim mantém
-        // o mapa afastado em vez de mentir sobre a posição.
         if (!centred) {
-            map.fitBounds(event.bounds, { maxZoom: 17 });
+            map.setView(event.latlng, 16);
             centred = true;
         }
 
-        if (metres <= GOOD_ENOUGH_METRES) {
+        if (event.accuracy <= GOOD_ENOUGH_METRES) {
             stopLocating();
         }
     });
 
-    // Falha de localização é estado visível: sem aviso, o botão parece quebrado.
-    map.on('locationerror', (event) => {
-        stopLocating();
+    map.on('locationerror', stopLocating);
 
-        readout.textContent = `Falhou: ${event.message}`;
-        readout.hidden = false;
-    });
+}
 
+// A foto depende de câmera na mão, então esse segue só no celular.
+if (onPhone()) {
     const photoNotice = document.getElementById('photo-notice');
 
     floatingButton({
