@@ -220,24 +220,21 @@
 }
 
 .popup-value {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    flex-wrap: wrap;
     margin-top: 0.5rem;
-    font-size: 1.75rem;
+    font-size: 1.6rem;
     font-weight: 600;
     line-height: 1;
     font-variant-numeric: tabular-nums;
 }
 
-.popup-value span {
-    margin-left: 0.125rem;
-    font-size: 0.9rem;
+.popup-value > span {
+    margin-left: -0.25rem;
+    font-size: 0.85rem;
     font-weight: 500;
-    color: var(--color-stone-600);
-}
-
-.popup-empty {
-    margin-top: 0.5rem;
-    font-size: 1.05rem;
-    font-weight: 600;
     color: var(--color-stone-600);
 }
 
@@ -248,13 +245,146 @@
     color: var(--color-stone-600);
 }
 
-.popup-kind {
+/* ---- Medidor (bullet gauge vertical) ----
+   Faixas qualitativas ao fundo, água por cima, linhas de cota no topo. */
+
+.gauge {
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 0.4rem;
     margin-top: 0.6rem;
-    font-size: 0.66rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+}
+
+.gauge-ruler {
+    position: relative;
+    font-size: 0.6rem;
+    font-variant-numeric: tabular-nums;
     color: var(--color-stone-500);
+}
+
+.gauge-ruler i {
+    position: absolute;
+    right: 0;
+    transform: translateY(50%);
+    font-style: normal;
+    white-space: nowrap;
+}
+
+.gauge-ruler i::after {
+    content: '';
+    position: absolute;
+    right: -0.3rem;
+    top: 50%;
+    width: 0.2rem;
+    border-top: 1px solid #c3c2b7;
+}
+
+.tank {
+    position: relative;
+    height: 150px;
+    overflow: hidden;
+    border: 1px solid #c3c2b7;
+    border-radius: 3px;
+}
+
+.band {
+    position: absolute;
+    left: 0;
+    right: 0;
+}
+
+.band[data-zone='normal'] {
+    background: #e4f3e3;
+}
+
+.band[data-zone='alert'] {
+    background: #fcf0d7;
+}
+
+.band[data-zone='critical'] {
+    background: #f6e3e2;
+}
+
+.water {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #2a78d6;
+    border-top: 2px solid #256abf;
+}
+
+/* Hachura em vez de água: ausência de leitura não se representa com nível zero. */
+.tank-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 0 0.5rem;
+    background:
+        repeating-linear-gradient(-45deg, rgb(137 135 129 / 0.22) 0 1px, transparent 1px 9px),
+        rgb(252 252 251 / 0.72);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-align: center;
+    text-transform: uppercase;
+    color: var(--color-stone-600);
+}
+
+/* Halo de superfície: sobre a água azul, a linha vermelha mede 1,09:1 de
+   contraste e desapareceria sem ele. */
+.limit {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    border-top: 2px solid #fab219;
+    box-shadow:
+        0 -1px 0 #fcfcfb,
+        0 1px 0 #fcfcfb;
+    pointer-events: none;
+}
+
+.limit[data-kind='critical'] {
+    border-top-color: #d03b3b;
+}
+
+.limit b {
+    position: absolute;
+    right: 2px;
+    top: -0.85rem;
+    border: 1px solid #fab219;
+    border-radius: 3px;
+    background: #fcfcfb;
+    padding: 0 0.2rem;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--color-stone-900);
+}
+
+.limit[data-kind='critical'] b {
+    border-color: #d03b3b;
+}
+
+.popup-trend {
+    border: 1px solid var(--color-stone-300);
+    border-radius: 4px;
+    background: var(--color-stone-50);
+    padding: 0.1rem 0.3rem;
+    font-size: 0.68rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--color-stone-600);
+}
+
+.popup-trend[data-rising='true'] {
+    border-color: #fab219;
+    background: #fcf0d7;
+    color: var(--color-stone-900);
 }
 
 /* Régua das cotas oficiais: mostra a distância até a inundação, que é o que

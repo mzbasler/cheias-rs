@@ -55,6 +55,83 @@ function escape(value) {
     return element.innerHTML;
 }
 
+/**
+ * Topo da escala do medidor. A fonte informa as cotas, mas não o leito nem a
+ * margem do rio: usa-se 20% acima do maior valor conhecido, arredondado para
+ * meio metro, para a água nunca encostar no teto.
+ */
+function gaugeTop(station) {
+    const ceiling = Math.max(station.criticalLevel ?? 0, station.reading.value, station.peak ?? 0);
+
+    return Math.max(0.5, Math.ceil(ceiling * 1.2 * 2) / 2);
+}
+
+const percent = (value, top) => Math.min(100, Math.max(0, (value / top) * 100));
+
+/**
+ * Bullet gauge vertical: faixas qualitativas ao fundo, água por cima, linhas de
+ * cota no topo. Mostra de relance a que distância o rio está da inundação —
+ * coisa que o número sozinho não diz a quem não conhece o rio.
+ */
+function gauge(station) {
+    const top = gaugeTop(station);
+    const alert = station.alertLevel;
+    const critical = station.criticalLevel;
+
+    const alertAt = alert === null ? 100 : percent(alert, top);
+    const criticalAt = critical === null ? 100 : percent(critical, top);
+
+    const bands = `
+        <div class="band" data-zone="normal" style="bottom:0;height:${alertAt}%"></div>
+        <div class="band" data-zone="alert" style="bottom:${alertAt}%;height:${Math.max(0, criticalAt - alertAt)}%"></div>
+        <div class="band" data-zone="critical" style="bottom:${criticalAt}%;height:${Math.max(0, 100 - criticalAt)}%"></div>
+    `;
+
+    // Halo na linha de cota: sobre a água azul, vermelho mede 1,09:1 de contraste
+    // e desapareceria.
+    const marks = [
+        ['alert', 'Alerta', alert],
+        ['critical', 'Inundação', critical],
+    ]
+        .filter(([, , value]) => value !== null)
+        .map(
+            ([kind, label, value]) =>
+                `<div class="limit" data-kind="${kind}" style="bottom:${percent(value, top)}%"><b>${label}</b></div>`,
+        )
+        .join('');
+
+    const ruler = [0, 0.5, 1]
+        .map((fraction) => `<i style="bottom:${fraction * 100}%">${number(top * fraction, 1)}</i>`)
+        .join('');
+
+    const water = station.reading.stale
+        ? '<div class="tank-empty">Sem leitura atual</div>'
+        : `<div class="water" style="height:${percent(station.reading.value, top)}%"></div>`;
+
+    return `
+        <div class="gauge">
+            <div class="gauge-ruler" aria-hidden="true">${ruler}</div>
+            <div class="tank" role="img" aria-label="${escape(station.name)}: ${number(station.reading.value)} m de ${number(top, 1)} m na escala">
+                ${bands}
+                ${water}
+                ${marks}
+            </div>
+        </div>
+    `;
+}
+
+function trendLabel(change) {
+    if (change === null) {
+        return '';
+    }
+
+    const { value, hours } = change;
+    const arrow = value > 0.005 ? '▲' : value < -0.005 ? '▼' : '—';
+    const sign = value > 0 ? '+' : '';
+
+    return `<span class="popup-trend" data-rising="${value > 0.005}">${arrow} ${sign}${number(value)} m em ${number(hours, 1)} h</span>`;
+}
+
 function measuredBlock(station) {
     const { reading, unit } = station;
 
@@ -64,19 +141,19 @@ function measuredBlock(station) {
         : '';
 
     return `
-        <p class="popup-kind">Nível</p>
-        <p class="popup-value">${number(reading.value)}<span>${escape(unit ?? 'm')}</span></p>
+        ${gauge(station)}
+        <p class="popup-value">
+            ${number(reading.value)}<span>${escape(unit ?? 'm')}</span>
+            ${trendLabel(station.change)}
+        </p>
         <p class="popup-note">${dateFormat.format(new Date(reading.measuredAt))}</p>
         ${staleWarning}
-        ${levelScale(station)}
+        ${levelTable(station)}
     `;
 }
 
-/**
- * Régua das cotas oficiais com a leitura marcada. O número sozinho não diz nada a
- * quem não conhece o rio; a distância até a inundação diz.
- */
-function levelScale(station) {
+/** Quanto falta — ou quanto já passou — de cada cota. */
+function levelTable(station) {
     const marks = [
         ['Alerta', station.alertLevel, STATUS.alert.color],
         ['Inundação', station.criticalLevel, STATUS.critical.color],
@@ -86,16 +163,16 @@ function levelScale(station) {
         return '<p class="popup-note">Sem cota de referência publicada.</p>';
     }
 
-    // Só chamada de dentro de measuredBlock, que já garantiu haver leitura.
     const rows = marks
         .map(([label, value, color]) => {
-            const reached = station.reading.value >= value;
+            const gap = value - station.reading.value;
+            const reached = gap <= 0;
 
             return `
                 <li class="${reached ? 'is-reached' : ''}" style="--mark:${color}">
                     <span>${label}</span>
                     <strong>${number(value)} m</strong>
-                    <em>${reached ? 'atingida' : `faltam ${number(value - station.reading.value)} m`}</em>
+                    <em>${reached ? `passou ${number(-gap)} m` : `faltam ${number(gap)} m`}</em>
                 </li>
             `;
         })
@@ -129,7 +206,13 @@ const map = L.map('map', {
     attributionControl: false,
 });
 
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+// Voyager do CARTO: terreno neutro, mas rios e lâminas de água em azul
+// definido. O mapa padrão do OSM satura verde e laranja, competindo com as
+// cores de alerta; o Positron apaga a água, que aqui é o assunto.
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    maxZoom: 19,
+}).addTo(map);
 
 /**
  * Uma camada por estado, para a legenda poder ligar e desligar cada um. Numa
@@ -147,9 +230,9 @@ stations.forEach((station) => {
         riseOnHover: true,
     });
 
-    // Largura mínima: sem ela o Leaflet aperta o popup até a régua de cotas
-    // quebrar linha. Máxima para não virar uma faixa larga no celular.
-    marker.bindPopup(popup(station), { minWidth: 244, maxWidth: 288 });
+    // Largura mínima: sem ela o Leaflet aperta o popup e o medidor comprime.
+    // Máxima para não virar uma faixa larga no celular.
+    marker.bindPopup(popup(station), { minWidth: 236, maxWidth: 268 });
 
     (layers[station.status] ??= L.layerGroup().addTo(map)).addLayer(marker);
 });
@@ -187,7 +270,10 @@ legend.onAdd = () => {
         <div class="legend-panel" id="legend-panel" hidden>
             <ul class="legend-list">${rows}</ul>
         </div>
-        <p class="legend-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></p>
+        <p class="legend-credit">
+            © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+            · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>
+        </p>
     `;
 
     const toggle = container.querySelector('.legend-toggle');

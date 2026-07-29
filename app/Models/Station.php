@@ -15,6 +15,9 @@ class Station extends Model
      */
     public const STALE_AFTER_HOURS = 3;
 
+    /** Janela de histórico que o medidor usa para pico e variação. */
+    public const HISTORY_HOURS = 48;
+
     protected $guarded = [];
 
     public function readings(): HasMany
@@ -25,6 +28,17 @@ class Station extends Model
     public function latestReading(): HasOne
     {
         return $this->hasOne(Reading::class)->latestOfMany('measured_at');
+    }
+
+    /**
+     * Janela que alimenta o medidor: define o pico usado como topo da escala e a
+     * variação das últimas horas. Em ordem crescente de tempo.
+     */
+    public function recentReadings(): HasMany
+    {
+        return $this->hasMany(Reading::class)
+            ->where('measured_at', '>=', now()->subHours(self::HISTORY_HOURS))
+            ->orderBy('measured_at');
     }
 
     /**
