@@ -43,9 +43,31 @@ class MapController extends Controller
                 // margem do rio: usa-se o maior valor conhecido como referência.
                 'peak' => $station->recentReadings->max('value'),
                 'change' => $this->change($station->recentReadings),
+                'history' => $this->history($station->recentReadings),
             ]);
 
         return view('map', ['stations' => $stations]);
+    }
+
+    /**
+     * Série das últimas 24 h para o gráfico, como pares [epoch, valor] — o par
+     * ocupa uma fração do que um objeto ocuparia, e são milhares de pontos.
+     *
+     * @param  Collection<int, Reading>  $readings
+     * @return list<array{0: int, 1: float}>
+     */
+    private function history(Collection $readings): array
+    {
+        $since = now()->subDay();
+
+        return $readings
+            ->filter(fn (Reading $reading): bool => $reading->measured_at->gte($since))
+            ->map(fn (Reading $reading): array => [
+                $reading->measured_at->getTimestamp(),
+                $reading->value,
+            ])
+            ->values()
+            ->all();
     }
 
     /**

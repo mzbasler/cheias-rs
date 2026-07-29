@@ -387,6 +387,68 @@
     color: var(--color-stone-900);
 }
 
+/* ---- Detalhes recolhíveis ---- */
+
+.popup-details {
+    margin-top: 0.6rem;
+    border-top: 1px solid var(--color-stone-200);
+}
+
+.popup-details summary {
+    padding: 0.55rem 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #256abf;
+    cursor: pointer;
+}
+
+/* Alvo de toque confortável: é usado com uma mão, com pressa. */
+.popup-details summary::marker {
+    font-size: 0.7rem;
+}
+
+.popup-details h3 {
+    margin-top: 0.7rem;
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-stone-500);
+}
+
+.popup-action {
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.popup-chart {
+    display: block;
+    width: 100%;
+    height: 54px;
+    margin-top: 0.35rem;
+    border: 1px solid var(--color-stone-200);
+    border-radius: 3px;
+    background: var(--color-stone-50);
+}
+
+.popup-chart polyline {
+    fill: none;
+    stroke: #2a78d6;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+}
+
+.popup-chart-axis {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.2rem;
+    font-size: 0.66rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-stone-500);
+}
+
 /* Régua das cotas oficiais: mostra a distância até a inundação, que é o que
    importa para quem não conhece o rio de cabeça. */
 .popup-scale {

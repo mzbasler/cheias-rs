@@ -27,9 +27,28 @@ const dateFormat = new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo',
 });
 
+const timeFormat = new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+});
+
 const SOURCE_LABEL = {
     sigdc: 'Defesa Civil de Eldorado do Sul (SIGDC)',
     sace: 'SGB/CPRM — SACE',
+};
+
+/**
+ * O que o morador deve fazer em cada estado. Sai do estado, não do número: quem
+ * abre isto durante cheia precisa de instrução, não de interpretação.
+ */
+const ACTION = {
+    critical:
+        'Risco imediato. A cota de inundação foi atingida — siga as instruções da Defesa Civil e ligue 199.',
+    alert: 'Risco elevado. A cota de alerta foi atingida — prepare-se e acompanhe as orientações da Defesa Civil.',
+    normal: 'Situação normal. O nível está abaixo da cota de alerta deste ponto.',
+    unknown:
+        'Este ponto está sem leitura recente ou sem cota publicada. Consulte a Defesa Civil pelo 199 antes de tirar conclusões.',
 };
 
 const number = (value, digits = 2) =>
@@ -181,6 +200,48 @@ function levelTable(station) {
     return `<ul class="popup-scale">${rows}</ul>`;
 }
 
+/**
+ * Gráfico das últimas 24 h. Linha, não barra: a variação é de centímetros e
+ * barra com base truncada mentiria sobre a proporção. A faixa vertical usada vai
+ * declarada em texto embaixo, porque o eixo não começa no zero.
+ */
+function historyBlock(station) {
+    const series = station.history ?? [];
+
+    if (series.length < 2) {
+        return '<p class="popup-note">Sem leituras suficientes nas últimas 24 horas.</p>';
+    }
+
+    const values = series.map(([, value]) => value);
+    const low = Math.min(...values);
+    const high = Math.max(...values);
+    const pad = Math.max((high - low) * 0.12, 0.01);
+    const floor = low - pad;
+    const span = high + pad - floor || 1;
+
+    const points = series
+        .map(([, value], index) => {
+            const x = ((index / (series.length - 1)) * 100).toFixed(2);
+            const y = (40 - ((value - floor) / span) * 40).toFixed(2);
+
+            return `${x},${y}`;
+        })
+        .join(' ');
+
+    const first = timeFormat.format(new Date(series[0][0] * 1000));
+    const last = timeFormat.format(new Date(series.at(-1)[0] * 1000));
+
+    return `
+        <svg class="popup-chart" viewBox="0 0 100 40" preserveAspectRatio="none" role="img"
+             aria-label="Nível variou de ${number(low)} a ${number(high)} metros nas últimas 24 horas">
+            <polyline points="${points}" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <p class="popup-chart-axis"><span>${first}</span><span>${series.length} leituras</span><span>${last}</span></p>
+        <p class="popup-note">Escala do gráfico: ${number(floor)} a ${number(high + pad)} m —
+        não começa no zero. Mín ${number(low)} · máx ${number(high)} m.</p>
+    `;
+}
+
 function popup(station) {
     const status = STATUS[station.status] ?? STATUS.unknown;
     const place = [station.river, station.municipality].filter(Boolean).join(' · ');
@@ -191,7 +252,21 @@ function popup(station) {
         ${place ? `<p class="popup-place">${escape(place)}</p>` : ''}
         <p class="popup-status" style="--status:${status.color}">${status.label}</p>
         ${measuredBlock(station)}
-        <p class="popup-source">${escape(SOURCE_LABEL[source] ?? source)}</p>
+
+        <details class="popup-details">
+            <summary>Ver detalhes e o que fazer</summary>
+
+            <h3>O que fazer agora</h3>
+            <p class="popup-action">${ACTION[station.status] ?? ACTION.unknown}</p>
+
+            <h3>Cotas deste ponto</h3>
+            ${levelTable(station)}
+
+            <h3>Últimas 24 horas</h3>
+            ${historyBlock(station)}
+
+            <p class="popup-source">${escape(SOURCE_LABEL[source] ?? source)}</p>
+        </details>
     `;
 }
 
@@ -307,6 +382,14 @@ legend.onAdd = () => {
 };
 
 legend.addTo(map);
+
+// Abrir o detalhe muda a altura do popup; sem avisar o Leaflet, ele fica
+// ancorado errado e o conteúdo sai da tela.
+map.on('popupopen', (event) => {
+    const details = event.popup.getElement()?.querySelector('.popup-details');
+
+    details?.addEventListener('toggle', () => event.popup.update());
+});
 
 // O aviso reaparece a cada nova sessão: quem chega numa emergência precisa saber
 // que a página não é oficial, mesmo tendo dispensado o aviso semanas atrás.
