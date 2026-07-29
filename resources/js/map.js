@@ -518,16 +518,6 @@ if (onPhone()) {
 
         here.clearLayers();
 
-        // O círculo é a margem de erro declarada pelo navegador. Sem ele, um sinal
-        // de rede com quilômetros de erro apareceria como ponto exato.
-        L.circle(event.latlng, {
-            radius: event.accuracy,
-            color: '#1f6feb',
-            weight: 1,
-            fillColor: '#1f6feb',
-            fillOpacity: 0.12,
-        }).addTo(here);
-
         // Marcador distinto dos pins de estação: é a pessoa, não uma medição.
         L.circleMarker(event.latlng, {
             radius: 7,
