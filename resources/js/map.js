@@ -438,12 +438,40 @@ const ICON_CAMERA =
 if (onPhone()) {
     const here = L.layerGroup().addTo(map);
 
+    /** Abaixo disto o fixo é de GPS e não vale seguir gastando bateria. */
+    const GOOD_ENOUGH_METRES = 30;
+
+    /** Depois disto o sinal não vai melhorar mais — normalmente é rede, não GPS. */
+    const REFINE_TIMEOUT_MS = 20000;
+
+    let centred = false;
+    let giveUp = null;
+
+    function stopLocating() {
+        map.stopLocate();
+        clearTimeout(giveUp);
+        giveUp = null;
+    }
+
     floatingButton({
         label: 'Ir para minha localização',
         icon: ICON_LOCATE,
-        // Sem teto de zoom: o Leaflet enquadra pela precisão do sinal, então um
-        // teto baixo mantinha o mapa afastado e a marca parecia fora de lugar.
-        onClick: () => map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true }),
+        onClick: () => {
+            centred = false;
+            clearTimeout(giveUp);
+            giveUp = setTimeout(stopLocating, REFINE_TIMEOUT_MS);
+
+            // `watch` em vez de leitura única: o primeiro fixo do navegador vem da
+            // rede, com centenas de metros de erro, e o GPS só refina ao longo de
+            // alguns segundos. Pedir uma leitura só era o motivo da imprecisão.
+            map.locate({
+                watch: true,
+                setView: false,
+                enableHighAccuracy: true,
+                maximumAge: 0, // Sem posição de cache: fixo velho aponta onde a pessoa esteve.
+                timeout: REFINE_TIMEOUT_MS,
+            });
+        },
     });
 
     map.on('locationfound', (event) => {
@@ -451,9 +479,8 @@ if (onPhone()) {
 
         here.clearLayers();
 
-        // O círculo é a margem de erro que o navegador declara. Sem ele, um sinal
-        // impreciso — Wi-Fi ou IP, com quilômetros de erro — apareceria como um
-        // ponto exato e faria a pessoa se localizar errado.
+        // O círculo é a margem de erro declarada pelo navegador. Sem ele, um sinal
+        // de rede com quilômetros de erro apareceria como ponto exato.
         L.circle(event.latlng, {
             radius: event.accuracy,
             color: '#1f6feb',
@@ -472,11 +499,30 @@ if (onPhone()) {
         })
             .addTo(here)
             .bindTooltip(`Você está aqui · precisão de ${metres} m`);
+
+        // Enquadra pela margem de erro: fixo preciso aproxima, fixo ruim mantém
+        // o mapa afastado em vez de mentir sobre a posição.
+        if (!centred) {
+            map.fitBounds(event.bounds, { maxZoom: 17 });
+            centred = true;
+        }
+
+        if (metres <= GOOD_ENOUGH_METRES) {
+            stopLocating();
+        }
     });
 
     // Falha de localização é estado visível: sem aviso, o botão parece quebrado.
-    map.on('locationerror', () => {
-        window.alert('Não foi possível obter sua localização. Verifique a permissão de acesso no navegador.');
+    map.on('locationerror', (event) => {
+        stopLocating();
+
+        // Origem insegura é a causa mais comum de posição errada em teste: fora de
+        // HTTPS o navegador nega o GPS e devolve localização por rede.
+        const insecure = window.isSecureContext
+            ? ''
+            : ' A página não está em HTTPS, e sem isso o navegador não libera o GPS.';
+
+        window.alert(`Não foi possível obter sua localização: ${event.message}.${insecure}`);
     });
 
     const photoNotice = document.getElementById('photo-notice');
