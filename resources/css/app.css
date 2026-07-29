@@ -222,6 +222,12 @@
    cotas à esquerda e a água subindo do leito. Ele responde à pergunta única do
    card — a que distância o rio está de invadir. Tudo em volta fica quieto. */
 
+/* Responsivo pela viewport, não por medida fixa: no celular ocupa a largura
+   disponível e rola por dentro quando o conteúdo passa da altura da tela. */
+.leaflet-popup-content-wrapper {
+    width: min(24rem, calc(100vw - 2.5rem));
+}
+
 .leaflet-popup-content {
     --fs-title: 1rem;
     --fs-value: 1.75rem;
@@ -238,10 +244,23 @@
     --ink-soft: var(--color-stone-600);
     --rule: var(--color-stone-200);
 
-    margin: 0.75rem 0.85rem;
+    /* Desliga a largura em pixels que o Leaflet escreve no elemento. */
+    width: auto !important;
+    max-height: calc(100dvh - 9rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 0.7rem 0.8rem;
     font-size: var(--fs-body);
     line-height: 1.4;
     color: var(--ink);
+}
+
+/* Espaço para o polegar não fechar o card sem querer ao rolar. */
+.leaflet-popup-close-button {
+    width: 1.75rem !important;
+    height: 1.75rem !important;
+    font-size: 1.15rem !important;
+    line-height: 1.6 !important;
 }
 
 /* ---- Cabeçalho ---- */

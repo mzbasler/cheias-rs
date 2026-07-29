@@ -290,18 +290,16 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
 const layers = {};
 
 /**
- * O Leaflet dimensiona o popup pelo conteúdo: sem uma largura mínima alta, no
- * desktop ele ficava estreito e o card voltava a ser uma coluna. No celular a
- * largura fica presa à viewport, com folga para não colar nas bordas.
+ * Largura e altura do card ficam no CSS, não aqui. Medida em pixels no
+ * carregamento não acompanha rotação nem troca de tela; `maxWidth: 0` desliga o
+ * cálculo do Leaflet e deixa o layout fluido responder pela viewport.
  */
-const POPUP_WIDTH = (() => {
-    const available = window.innerWidth - 40;
-
-    return {
-        minWidth: Math.max(236, Math.min(340, available)),
-        maxWidth: Math.max(236, Math.min(420, available)),
-    };
-})();
+const POPUP_OPTIONS = {
+    maxWidth: 0,
+    minWidth: 0,
+    // Folga para o card não abrir por baixo do botão de filtros nem colar no topo.
+    autoPanPadding: [16, 16],
+};
 
 stations.forEach((station) => {
     const status = STATUS[station.status] ?? STATUS.unknown;
@@ -313,7 +311,7 @@ stations.forEach((station) => {
         riseOnHover: true,
     });
 
-    marker.bindPopup(popup(station), POPUP_WIDTH);
+    marker.bindPopup(popup(station), POPUP_OPTIONS);
 
     (layers[station.status] ??= L.layerGroup().addTo(map)).addLayer(marker);
 });
