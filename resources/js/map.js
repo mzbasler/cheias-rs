@@ -124,7 +124,7 @@ function gauge(station) {
         .join('');
 
     const water = station.reading.stale
-        ? '<div class="tank-empty">Sem leitura atual</div>'
+        ? '<div class="tank-empty">Sem leitura</div>'
         : `<div class="water" style="height:${percent(station.reading.value, top)}%"></div>`;
 
     return `
@@ -139,6 +139,37 @@ function gauge(station) {
     `;
 }
 
+/**
+ * A única informação de cota fora do detalhe: quanto falta para o próximo limiar,
+ * ou quanto já passou. É o número que um leigo precisa — o resto é técnico e vai
+ * para dentro do recolhível.
+ */
+function headline(station) {
+    const { value } = station.reading;
+    const alert = station.alertLevel;
+    const critical = station.criticalLevel;
+
+    if (critical !== null && value >= critical) {
+        return `<p class="popup-headline is-critical">Passou <strong>${number(value - critical)} m</strong> da cota de inundação</p>`;
+    }
+
+    if (critical !== null) {
+        const reached = alert !== null && value >= alert;
+
+        return `<p class="popup-headline${reached ? ' is-alert' : ''}">
+            Faltam <strong>${number(critical - value)} m</strong> para a cota de inundação
+        </p>`;
+    }
+
+    if (alert !== null) {
+        return value >= alert
+            ? `<p class="popup-headline is-alert">Passou <strong>${number(value - alert)} m</strong> da cota de alerta</p>`
+            : `<p class="popup-headline">Faltam <strong>${number(alert - value)} m</strong> para a cota de alerta</p>`;
+    }
+
+    return '<p class="popup-headline">Sem cota de referência publicada</p>';
+}
+
 function trendLabel(change) {
     if (change === null) {
         return '';
@@ -151,6 +182,10 @@ function trendLabel(change) {
     return `<span class="popup-trend" data-rising="${value > 0.005}">${arrow} ${sign}${number(value)} m em ${number(hours, 1)} h</span>`;
 }
 
+/**
+ * Medidor à esquerda, leitura à direita. Lado a lado em vez de empilhado: o card
+ * ficava alto demais, e no desktop a coluna vertical desperdiçava a largura.
+ */
 function measuredBlock(station) {
     const { reading, unit } = station;
 
@@ -160,14 +195,16 @@ function measuredBlock(station) {
         : '';
 
     return `
-        ${gauge(station)}
-        <p class="popup-value">
-            ${number(reading.value)}<span>${escape(unit ?? 'm')}</span>
-            ${trendLabel(station.change)}
-        </p>
-        <p class="popup-note">${dateFormat.format(new Date(reading.measuredAt))}</p>
-        ${staleWarning}
-        ${levelTable(station)}
+        <div class="popup-main">
+            ${gauge(station)}
+            <div class="popup-reading">
+                <p class="popup-value">${number(reading.value)}<span>${escape(unit ?? 'm')}</span></p>
+                ${trendLabel(station.change)}
+                <p class="popup-note">${dateFormat.format(new Date(reading.measuredAt))}</p>
+                ${staleWarning}
+            </div>
+        </div>
+        ${headline(station)}
     `;
 }
 
@@ -248,22 +285,31 @@ function popup(station) {
     const source = station.reading.source;
 
     return `
-        <h2 class="popup-title">${escape(station.name)}</h2>
-        ${place ? `<p class="popup-place">${escape(place)}</p>` : ''}
-        <p class="popup-status" style="--status:${status.color}">${status.label}</p>
+        <header class="popup-head" style="--status:${status.color}">
+            <h2 class="popup-title">${escape(station.name)}</h2>
+            ${place ? `<p class="popup-place">${escape(place)}</p>` : ''}
+            <p class="popup-status">${status.label}</p>
+        </header>
+
         ${measuredBlock(station)}
 
         <details class="popup-details">
             <summary>Ver detalhes e o que fazer</summary>
 
-            <h3>O que fazer agora</h3>
-            <p class="popup-action">${ACTION[station.status] ?? ACTION.unknown}</p>
+            <div class="popup-panels">
+                <section>
+                    <h3>O que fazer agora</h3>
+                    <p class="popup-action">${ACTION[station.status] ?? ACTION.unknown}</p>
 
-            <h3>Cotas deste ponto</h3>
-            ${levelTable(station)}
+                    <h3>Cotas deste ponto</h3>
+                    ${levelTable(station)}
+                </section>
 
-            <h3>Últimas 24 horas</h3>
-            ${historyBlock(station)}
+                <section>
+                    <h3>Últimas 24 horas</h3>
+                    ${historyBlock(station)}
+                </section>
+            </div>
 
             <p class="popup-source">${escape(SOURCE_LABEL[source] ?? source)}</p>
         </details>
@@ -295,6 +341,12 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
  */
 const layers = {};
 
+/**
+ * No desktop o card usa a largura para deixar de ser uma coluna alta; no celular
+ * fica preso à viewport, com folga para o popup não colar nas bordas.
+ */
+const POPUP_MAX_WIDTH = Math.max(236, Math.min(380, window.innerWidth - 40));
+
 stations.forEach((station) => {
     const status = STATUS[station.status] ?? STATUS.unknown;
 
@@ -305,9 +357,7 @@ stations.forEach((station) => {
         riseOnHover: true,
     });
 
-    // Largura mínima: sem ela o Leaflet aperta o popup e o medidor comprime.
-    // Máxima para não virar uma faixa larga no celular.
-    marker.bindPopup(popup(station), { minWidth: 236, maxWidth: 268 });
+    marker.bindPopup(popup(station), { minWidth: 236, maxWidth: POPUP_MAX_WIDTH });
 
     (layers[station.status] ??= L.layerGroup().addTo(map)).addLayer(marker);
 });
