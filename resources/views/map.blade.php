@@ -34,6 +34,30 @@
 
     <main id="map" class="h-dvh" role="application" aria-label="Mapa das estações de medição"></main>
 
+    {{-- O envio de foto ainda não existe. Um botão que aceitasse a imagem e a
+         descartasse faria alguém acreditar que pediu ajuda durante uma cheia. --}}
+    <dialog id="photo-notice" class="disclaimer" aria-labelledby="photo-notice-title">
+        <h1 id="photo-notice-title" class="disclaimer-title">Enviar foto do rio</h1>
+
+        <p class="disclaimer-text">
+            Esta função ainda não está ativa. Sua foto não seria recebida por
+            ninguém, então preferimos avisar em vez de aceitar o envio.
+        </p>
+
+        <p class="disclaimer-text">
+            <strong>Precisa de ajuda agora?</strong> Ligue para a Defesa Civil.
+        </p>
+
+        <ul class="disclaimer-phones">
+            <li><a href="tel:199"><span>Defesa Civil</span><strong>199</strong></a></li>
+            <li><a href="tel:193"><span>Bombeiros</span><strong>193</strong></a></li>
+        </ul>
+
+        <form method="dialog">
+            <button class="disclaimer-button" autofocus>Entendi</button>
+        </form>
+    </dialog>
+
     {{-- Dados fora do JavaScript: o navegador trata como texto, nunca como código. --}}
     <script type="application/json" id="stations-data">@json($stations)</script>
 

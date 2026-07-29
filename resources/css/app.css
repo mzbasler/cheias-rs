@@ -118,6 +118,26 @@
     text-decoration: underline;
 }
 
+/* ---- Botões flutuantes (só no celular) ---- */
+
+/* 44 px é o alvo de toque mínimo confortável — o app é usado com uma mão, com
+   pressa, e às vezes com a tela molhada. */
+.fab button {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+    color: var(--color-stone-800);
+    cursor: pointer;
+}
+
+.fab button:active {
+    background: var(--color-stone-100);
+}
+
 /* ---- Aviso de entrada ---- */
 
 .disclaimer {

@@ -389,6 +389,92 @@ legend.onAdd = () => {
 
 legend.addTo(map);
 
+/**
+ * Telefone, não tablet. Ponteiro grosso já separa toque de mouse, mas tablet
+ * também é toque: o lado curto da viewport é o que distingue — celular fica em
+ * torno de 430 px mesmo deitado, tablet passa de 700 px.
+ */
+function onPhone() {
+    return (
+        window.matchMedia('(pointer: coarse)').matches &&
+        Math.min(window.innerWidth, window.innerHeight) <= 480
+    );
+}
+
+/** Botão flutuante ancorado no canto, no padrão de controle do Leaflet. */
+function floatingButton({ label, icon, onClick }) {
+    const control = L.control({ position: 'bottomright' });
+
+    control.onAdd = () => {
+        const container = L.DomUtil.create('div', 'fab');
+
+        container.innerHTML = `
+            <button type="button" aria-label="${label}" title="${label}">
+                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">${icon}</svg>
+            </button>
+        `;
+
+        container.querySelector('button').addEventListener('click', onClick);
+
+        L.DomEvent.disableClickPropagation(container);
+
+        return container;
+    };
+
+    control.addTo(map);
+
+    return control;
+}
+
+const ICON_LOCATE =
+    '<circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
+    '<circle cx="12" cy="12" r="2" fill="currentColor"/>' +
+    '<path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+
+const ICON_CAMERA =
+    '<path d="M3 8.5A2.5 2.5 0 015.5 6h1.2l1-1.6A1 1 0 018.5 4h7a1 1 0 01.85.4L17.3 6h1.2A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>' +
+    '<circle cx="12" cy="12.5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.9"/>';
+
+if (onPhone()) {
+    let hereMarker = null;
+
+    floatingButton({
+        label: 'Ir para minha localização',
+        icon: ICON_LOCATE,
+        onClick: () => map.locate({ setView: true, maxZoom: 13, enableHighAccuracy: true }),
+    });
+
+    map.on('locationfound', (event) => {
+        // Marcador distinto dos pins de estação: é a pessoa, não uma medição.
+        if (hereMarker === null) {
+            hereMarker = L.circleMarker(event.latlng, {
+                radius: 7,
+                color: '#fff',
+                weight: 3,
+                fillColor: '#1f6feb',
+                fillOpacity: 1,
+            })
+                .addTo(map)
+                .bindTooltip('Você está aqui');
+        } else {
+            hereMarker.setLatLng(event.latlng);
+        }
+    });
+
+    // Falha de localização é estado visível: sem aviso, o botão parece quebrado.
+    map.on('locationerror', () => {
+        window.alert('Não foi possível obter sua localização. Verifique a permissão de acesso no navegador.');
+    });
+
+    const photoNotice = document.getElementById('photo-notice');
+
+    floatingButton({
+        label: 'Enviar foto do rio',
+        icon: ICON_CAMERA,
+        onClick: () => photoNotice.showModal(),
+    });
+}
+
 // O aviso reaparece a cada nova sessão: quem chega numa emergência precisa saber
 // que a página não é oficial, mesmo tendo dispensado o aviso semanas atrás.
 const disclaimer = document.getElementById('disclaimer');
