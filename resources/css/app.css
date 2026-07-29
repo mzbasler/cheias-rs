@@ -222,10 +222,12 @@
    cotas à esquerda e a água subindo do leito. Ele responde à pergunta única do
    card — a que distância o rio está de invadir. Tudo em volta fica quieto. */
 
-/* Responsivo pela viewport, não por medida fixa: no celular ocupa a largura
-   disponível e rola por dentro quando o conteúdo passa da altura da tela. */
+/* Responsivo pela viewport, não por medida fixa: no celular encolhe até a largura
+   disponível e rola por dentro quando o conteúdo passa da altura da tela.
+   `max-width` e não `width`, para o Leaflet ainda medir o elemento e conseguir
+   centralizá-lo sobre o pin. */
 .leaflet-popup-content-wrapper {
-    width: min(24rem, calc(100vw - 2.5rem));
+    max-width: calc(100vw - 2.5rem);
 }
 
 .leaflet-popup-content {
@@ -244,8 +246,8 @@
     --ink-soft: var(--color-stone-600);
     --rule: var(--color-stone-200);
 
-    /* Desliga a largura em pixels que o Leaflet escreve no elemento. */
-    width: auto !important;
+    /* A largura vem do Leaflet, mas nunca além da viewport. */
+    max-width: calc(100vw - 4rem);
     max-height: calc(100dvh - 9rem);
     overflow-y: auto;
     overscroll-behavior: contain;

@@ -295,10 +295,16 @@ const layers = {};
  * cálculo do Leaflet e deixa o layout fluido responder pela viewport.
  */
 const POPUP_OPTIONS = {
-    maxWidth: 0,
-    minWidth: 0,
+    // O Leaflet grava esta largura em pixels no card e usa o número para
+    // centralizá-lo. Com zero ele escreve 1 px e o card não aparece — o CSS é
+    // que faz a adaptação, mas a conta dele precisa de um valor plausível.
+    maxWidth: 384,
+    minWidth: 200,
     // Folga para o card não abrir por baixo do botão de filtros nem colar no topo.
     autoPanPadding: [16, 16],
+    // Mantém o card dentro da vista ao dar zoom: sem isto ele sai da tela junto
+    // com o pin e o usuário perde o que estava lendo.
+    keepInView: true,
 };
 
 stations.forEach((station) => {
