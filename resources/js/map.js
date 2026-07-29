@@ -108,9 +108,10 @@ function gauge(station) {
 
     // Halo na linha de cota: sobre a água azul, vermelho mede 1,09:1 de contraste
     // e desapareceria.
+    // Abreviado: "Inundação" não cabe na largura do tanque dentro de um popup.
     const marks = [
         ['alert', 'Alerta', alert],
-        ['critical', 'Inundação', critical],
+        ['critical', 'Inund.', critical],
     ]
         .filter(([, , value]) => value !== null)
         .map(
@@ -344,10 +345,18 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
 const layers = {};
 
 /**
- * No desktop o card usa a largura para deixar de ser uma coluna alta; no celular
- * fica preso à viewport, com folga para o popup não colar nas bordas.
+ * O Leaflet dimensiona o popup pelo conteúdo: sem uma largura mínima alta, no
+ * desktop ele ficava estreito e o card voltava a ser uma coluna. No celular a
+ * largura fica presa à viewport, com folga para não colar nas bordas.
  */
-const POPUP_MAX_WIDTH = Math.max(236, Math.min(420, window.innerWidth - 40));
+const POPUP_WIDTH = (() => {
+    const available = window.innerWidth - 40;
+
+    return {
+        minWidth: Math.max(236, Math.min(340, available)),
+        maxWidth: Math.max(236, Math.min(420, available)),
+    };
+})();
 
 stations.forEach((station) => {
     const status = STATUS[station.status] ?? STATUS.unknown;
@@ -359,7 +368,7 @@ stations.forEach((station) => {
         riseOnHover: true,
     });
 
-    marker.bindPopup(popup(station), { minWidth: 236, maxWidth: POPUP_MAX_WIDTH });
+    marker.bindPopup(popup(station), POPUP_WIDTH);
 
     (layers[station.status] ??= L.layerGroup().addTo(map)).addLayer(marker);
 });
