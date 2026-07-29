@@ -88,9 +88,10 @@ function gaugeTop(station) {
 const percent = (value, top) => Math.min(100, Math.max(0, (value / top) * 100));
 
 /**
- * Bullet gauge vertical: faixas qualitativas ao fundo, água por cima, linhas de
- * cota no topo. Mostra de relance a que distância o rio está da inundação —
- * coisa que o número sozinho não diz a quem não conhece o rio.
+ * Corte vertical do rio: faixas de risco ao fundo, água subindo do leito, cotas
+ * atravessando na altura de cada limiar. Largo em vez de estreito — com 45 px o
+ * tanque não simulava nada; ocupando a largura do card, a água encostando na
+ * linha de inundação se lê de relance.
  */
 function gauge(station) {
     const top = gaugeTop(station);
@@ -107,31 +108,32 @@ function gauge(station) {
     `;
 
     // Halo na linha de cota: sobre a água azul, vermelho mede 1,09:1 de contraste
-    // e desapareceria.
-    // Abreviado: "Inundação" não cabe na largura do tanque dentro de um popup.
+    // e desapareceria. A etiqueta cabe porque o tanque agora é largo.
     const marks = [
         ['alert', 'Alerta', alert],
-        ['critical', 'Inund.', critical],
+        ['critical', 'Inundação', critical],
     ]
         .filter(([, , value]) => value !== null)
         .map(
-            ([kind, label, value]) =>
-                `<div class="limit" data-kind="${kind}" style="bottom:${percent(value, top)}%"><b>${label}</b></div>`,
+            ([kind, label, value]) => `
+                <div class="limit" data-kind="${kind}" style="bottom:${percent(value, top)}%">
+                    <b>${label} ${number(value)} m</b>
+                </div>
+            `,
         )
         .join('');
 
-    const ruler = [0, 0.5, 1]
-        .map((fraction) => `<i style="bottom:${fraction * 100}%">${number(top * fraction, 1)}</i>`)
-        .join('');
-
     const water = station.reading.stale
-        ? '<div class="tank-empty">Sem leitura</div>'
+        ? '<div class="tank-empty">Sem leitura recente</div>'
         : `<div class="water" style="height:${percent(station.reading.value, top)}%"></div>`;
 
     return `
         <div class="gauge">
-            <div class="gauge-ruler" aria-hidden="true">${ruler}</div>
-            <div class="tank" role="img" aria-label="${escape(station.name)}: ${number(station.reading.value)} m de ${number(top, 1)} m na escala">
+            <div class="gauge-scale" aria-hidden="true">
+                <i>${number(top, 1)}</i>
+                <i>0,0</i>
+            </div>
+            <div class="tank" role="img" aria-label="${escape(station.name)}: ${number(station.reading.value)} m numa escala até ${number(top, 1)} m">
                 ${bands}
                 ${water}
                 ${marks}
@@ -183,10 +185,7 @@ function trendLabel(change) {
     return `<span class="popup-trend" data-rising="${value > 0.005}">${arrow} ${sign}${number(value)} m em ${number(hours, 1)} h</span>`;
 }
 
-/**
- * Medidor à esquerda, leitura à direita. Lado a lado em vez de empilhado: o card
- * ficava alto demais, e no desktop a coluna vertical desperdiçava a largura.
- */
+/** Medidor na largura toda, leitura embaixo dele. */
 function measuredBlock(station) {
     const { reading, unit } = station;
 
@@ -196,15 +195,13 @@ function measuredBlock(station) {
         : '';
 
     return `
-        <div class="popup-main">
-            ${gauge(station)}
-            <div class="popup-reading">
-                <p class="popup-value">${number(reading.value)}<span>${escape(unit ?? 'm')}</span></p>
-                ${trendLabel(station.change)}
-                <p class="popup-note">${dateFormat.format(new Date(reading.measuredAt))}</p>
-                ${staleWarning}
-            </div>
+        ${gauge(station)}
+        <div class="popup-reading">
+            <p class="popup-value">${number(reading.value)}<span>${escape(unit ?? 'm')}</span></p>
+            ${trendLabel(station.change)}
+            <span class="popup-when">${dateFormat.format(new Date(reading.measuredAt))}</span>
         </div>
+        ${staleWarning}
         ${headline(station)}
     `;
 }
@@ -294,28 +291,16 @@ function popup(station) {
 
         ${measuredBlock(station)}
 
-        <details class="popup-details">
-            <summary>Ver detalhes e o que fazer</summary>
+        <h3>O que fazer</h3>
+        <p class="popup-action">${ACTION[station.status] ?? ACTION.unknown}</p>
 
-            <div class="popup-panels">
-                <section>
-                    <h3>O que fazer agora</h3>
-                    <p class="popup-action">${ACTION[station.status] ?? ACTION.unknown}</p>
-                </section>
+        <h3>Cotas deste ponto</h3>
+        ${levelTable(station)}
 
-                <section>
-                    <h3>Cotas deste ponto</h3>
-                    ${levelTable(station)}
-                </section>
-            </div>
+        <h3>Últimas 24 horas</h3>
+        ${historyBlock(station)}
 
-            <section class="popup-chart-block">
-                <h3>Últimas 24 horas</h3>
-                ${historyBlock(station)}
-            </section>
-
-            <p class="popup-source">${escape(SOURCE_LABEL[source] ?? source)}</p>
-        </details>
+        <p class="popup-source">${escape(SOURCE_LABEL[source] ?? source)}</p>
     `;
 }
 
@@ -443,14 +428,6 @@ legend.onAdd = () => {
 };
 
 legend.addTo(map);
-
-// Abrir o detalhe muda a altura do popup; sem avisar o Leaflet, ele fica
-// ancorado errado e o conteúdo sai da tela.
-map.on('popupopen', (event) => {
-    const details = event.popup.getElement()?.querySelector('.popup-details');
-
-    details?.addEventListener('toggle', () => event.popup.update());
-});
 
 // O aviso reaparece a cada nova sessão: quem chega numa emergência precisa saber
 // que a página não é oficial, mesmo tendo dispensado o aviso semanas atrás.
