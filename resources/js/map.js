@@ -124,15 +124,18 @@ function gauge(station) {
         .join('');
 
     const water = station.reading.stale
-        ? '<div class="tank-empty">Sem leitura recente</div>'
+        ? '<div class="tank-empty">Sem leitura</div>'
         : `<div class="water" style="height:${percent(station.reading.value, top)}%"></div>`;
+
+    // Régua com marca a cada quarto da escala: só os extremos não dão noção de
+    // proporção a quem olha o medidor.
+    const ruler = [0, 0.25, 0.5, 0.75, 1]
+        .map((fraction) => `<i style="bottom:${fraction * 100}%">${number(top * fraction, 1)}</i>`)
+        .join('');
 
     return `
         <div class="gauge">
-            <div class="gauge-scale" aria-hidden="true">
-                <i>${number(top, 1)}</i>
-                <i>0,0</i>
-            </div>
+            <div class="gauge-ruler" aria-hidden="true">${ruler}</div>
             <div class="tank" role="img" aria-label="${escape(station.name)}: ${number(station.reading.value)} m numa escala até ${number(top, 1)} m">
                 ${bands}
                 ${water}
@@ -143,34 +146,28 @@ function gauge(station) {
 }
 
 /**
- * A única informação de cota fora do detalhe: quanto falta para o próximo limiar,
- * ou quanto já passou. É o número que um leigo precisa — o resto é técnico e vai
- * para dentro do recolhível.
+ * A resposta que o card existe para dar: quanto falta para o rio transbordar, ou
+ * quanto já passou disso. O valor de cada cota já está no medidor — repetir tudo
+ * numa tabela era a informação duplicada.
  */
-function headline(station) {
+function gapLine(station) {
     const { value } = station.reading;
     const alert = station.alertLevel;
     const critical = station.criticalLevel;
 
-    if (critical !== null && value >= critical) {
-        return `<p class="popup-headline is-critical">Passou <strong>${number(value - critical)} m</strong> da cota de inundação</p>`;
-    }
-
     if (critical !== null) {
-        const reached = alert !== null && value >= alert;
-
-        return `<p class="popup-headline${reached ? ' is-alert' : ''}">
-            Faltam <strong>${number(critical - value)} m</strong> para a cota de inundação
-        </p>`;
+        return value >= critical
+            ? `<p class="card-gap" data-level="critical">Passou <strong>${number(value - critical)} m</strong> da cota de inundação</p>`
+            : `<p class="card-gap"${alert !== null && value >= alert ? ' data-level="alert"' : ''}>Faltam <strong>${number(critical - value)} m</strong> para a cota de inundação</p>`;
     }
 
     if (alert !== null) {
         return value >= alert
-            ? `<p class="popup-headline is-alert">Passou <strong>${number(value - alert)} m</strong> da cota de alerta</p>`
-            : `<p class="popup-headline">Faltam <strong>${number(alert - value)} m</strong> para a cota de alerta</p>`;
+            ? `<p class="card-gap" data-level="alert">Passou <strong>${number(value - alert)} m</strong> da cota de alerta</p>`
+            : `<p class="card-gap">Faltam <strong>${number(alert - value)} m</strong> para a cota de alerta</p>`;
     }
 
-    return '<p class="popup-headline">Sem cota de referência publicada</p>';
+    return '<p class="card-gap">Sem cota de referência publicada</p>';
 }
 
 function trendLabel(change) {
@@ -182,57 +179,7 @@ function trendLabel(change) {
     const arrow = value > 0.005 ? '▲' : value < -0.005 ? '▼' : '—';
     const sign = value > 0 ? '+' : '';
 
-    return `<span class="popup-trend" data-rising="${value > 0.005}">${arrow} ${sign}${number(value)} m em ${number(hours, 1)} h</span>`;
-}
-
-/** Medidor na largura toda, leitura embaixo dele. */
-function measuredBlock(station) {
-    const { reading, unit } = station;
-
-    // Leitura velha aparece — mas nunca sem o carimbo que a denuncia como velha.
-    const staleWarning = reading.stale
-        ? '<p class="popup-stale">Transmissão interrompida · leitura desatualizada</p>'
-        : '';
-
-    return `
-        ${gauge(station)}
-        <div class="popup-reading">
-            <p class="popup-value">${number(reading.value)}<span>${escape(unit ?? 'm')}</span></p>
-            ${trendLabel(station.change)}
-            <span class="popup-when">${dateFormat.format(new Date(reading.measuredAt))}</span>
-        </div>
-        ${staleWarning}
-        ${headline(station)}
-    `;
-}
-
-/** Quanto falta — ou quanto já passou — de cada cota. */
-function levelTable(station) {
-    const marks = [
-        ['Alerta', station.alertLevel, STATUS.alert.color],
-        ['Inundação', station.criticalLevel, STATUS.critical.color],
-    ].filter(([, value]) => value !== null);
-
-    if (marks.length === 0) {
-        return '<p class="popup-note">Sem cota de referência publicada.</p>';
-    }
-
-    const rows = marks
-        .map(([label, value, color]) => {
-            const gap = value - station.reading.value;
-            const reached = gap <= 0;
-
-            return `
-                <li class="${reached ? 'is-reached' : ''}" style="--mark:${color}">
-                    <span>${label}</span>
-                    <strong>${number(value)} m</strong>
-                    <em>${reached ? `passou ${number(-gap)} m` : `faltam ${number(gap)} m`}</em>
-                </li>
-            `;
-        })
-        .join('');
-
-    return `<ul class="popup-scale">${rows}</ul>`;
+    return `<em class="card-trend" data-rising="${value > 0.005}">${arrow} ${sign}${number(value)} m / ${number(hours, 1)} h</em>`;
 }
 
 /**
@@ -244,7 +191,7 @@ function historyBlock(station) {
     const series = station.history ?? [];
 
     if (series.length < 2) {
-        return '<p class="popup-note">Sem leituras suficientes nas últimas 24 horas.</p>';
+        return '<p class="card-note">Sem leituras suficientes nas últimas 24 horas.</p>';
     }
 
     const values = series.map(([, value]) => value);
@@ -267,40 +214,53 @@ function historyBlock(station) {
     const last = timeFormat.format(new Date(series.at(-1)[0] * 1000));
 
     return `
-        <svg class="popup-chart" viewBox="0 0 100 40" preserveAspectRatio="none" role="img"
+        <svg class="card-chart" viewBox="0 0 100 40" preserveAspectRatio="none" role="img"
              aria-label="Nível variou de ${number(low)} a ${number(high)} metros nas últimas 24 horas">
             <polyline points="${points}" vector-effect="non-scaling-stroke"/>
         </svg>
-        <p class="popup-chart-axis"><span>${first}</span><span>${series.length} leituras</span><span>${last}</span></p>
-        <p class="popup-note">Escala do gráfico: ${number(floor)} a ${number(high + pad)} m —
-        não começa no zero. Mín ${number(low)} · máx ${number(high)} m.</p>
+        <p class="card-axis"><span>${first}</span><span>${series.length} leituras</span><span>${last}</span></p>
+        <p class="card-note">Escala ${number(floor)}–${number(high + pad)} m, não começa no zero.
+        Mín ${number(low)} · máx ${number(high)} m.</p>
     `;
 }
 
 function popup(station) {
     const status = STATUS[station.status] ?? STATUS.unknown;
     const place = [station.river, station.municipality].filter(Boolean).join(' · ');
-    const source = station.reading.source;
+    const { reading, unit } = station;
+
+    // Leitura velha aparece — mas nunca sem o carimbo que a denuncia como velha.
+    const staleWarning = reading.stale
+        ? '<p class="card-stale">Transmissão interrompida · leitura desatualizada</p>'
+        : '';
 
     return `
-        <header class="popup-head" style="--status:${status.color}">
-            <h2 class="popup-title">${escape(station.name)}</h2>
-            ${place ? `<p class="popup-place">${escape(place)}</p>` : ''}
-            <p class="popup-status">${status.label}</p>
-        </header>
+        <div style="--status:${status.color}">
+            <header class="card-head">
+                <h2 class="card-name">${escape(station.name)}</h2>
+                <span class="card-badge" data-status="${station.status}">${status.label}</span>
+            </header>
+            ${place ? `<p class="card-place">${escape(place)}</p>` : ''}
 
-        ${measuredBlock(station)}
+            ${gauge(station)}
 
-        <h3>O que fazer</h3>
-        <p class="popup-action">${ACTION[station.status] ?? ACTION.unknown}</p>
+            <p class="card-reading">
+                <strong class="card-value">${number(reading.value)}<span>${escape(unit ?? 'm')}</span></strong>
+                ${trendLabel(station.change)}
+                <span class="card-time">${dateFormat.format(new Date(reading.measuredAt))}</span>
+            </p>
+            ${staleWarning}
 
-        <h3>Cotas deste ponto</h3>
-        ${levelTable(station)}
+            ${gapLine(station)}
 
-        <h3>Últimas 24 horas</h3>
-        ${historyBlock(station)}
+            <p class="card-eyebrow">O que fazer</p>
+            <p class="card-action">${ACTION[station.status] ?? ACTION.unknown}</p>
 
-        <p class="popup-source">${escape(SOURCE_LABEL[source] ?? source)}</p>
+            <p class="card-eyebrow">Últimas 24 horas</p>
+            ${historyBlock(station)}
+
+            <p class="card-source">${escape(SOURCE_LABEL[reading.source] ?? reading.source)}</p>
+        </div>
     `;
 }
 
