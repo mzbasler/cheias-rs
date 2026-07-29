@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -22,24 +23,59 @@ class Station extends Model
         return $this->hasMany(Reading::class);
     }
 
+    /**
+     * O filtro de métrica vai dentro do `ofMany`: encadeado por fora, ele só
+     * seria aplicado depois de a subconsulta já ter escolhido a linha mais
+     * recente — e uma vazão do mesmo instante roubaria o lugar do nível.
+     */
     public function latestReading(): HasOne
     {
-        return $this->hasOne(Reading::class)->latestOfMany('measured_at');
+        return $this->hasOne(Reading::class)->ofMany(
+            ['measured_at' => 'max'],
+            fn (Builder $query) => $query->where('metric', Reading::METRIC_LEVEL),
+        );
     }
 
     /**
-     * Estado do ponto: 'critical', 'alert', 'normal' ou 'unknown'.
+     * Vazão estimada pelo modelo para hoje. Não substitui a medição de nível:
+     * é outra grandeza, de outra natureza, e só existe porque cobre as estações
+     * cujas leituras ainda não temos.
+     */
+    public function todayDischarge(): HasOne
+    {
+        return $this->hasOne(Reading::class)
+            ->where('metric', Reading::METRIC_DISCHARGE)
+            ->whereDate('measured_at', now()->toDateString());
+    }
+
+    public function dischargeForecast(): HasMany
+    {
+        return $this->hasMany(Reading::class)
+            ->where('metric', Reading::METRIC_DISCHARGE)
+            ->where('measured_at', '>=', now()->startOfDay())
+            ->orderBy('measured_at');
+    }
+
+    /**
+     * Estado do ponto.
      *
-     * 'unknown' cobre os três casos em que não dá para afirmar nada — sem
-     * leitura, leitura velha, ou fonte que não informa as cotas. Nenhum deles
-     * pode ser apresentado como "normal".
+     * Distingue "não temos feed desta estação" de "o feed calou": a primeira é
+     * uma entrada de catálogo, a segunda é um sensor mudo durante cheia. Tratar
+     * as duas com o mesmo símbolo transforma o mapa em ruído e esconde a que
+     * realmente pede atenção.
      */
     public function status(): string
     {
         $reading = $this->latestReading;
 
-        if ($reading === null || $reading->isStale()) {
-            return 'unknown';
+        if ($reading === null) {
+            // Sem nível medido, mas com vazão modelada: há o que mostrar, desde
+            // que rotulado como estimativa e nunca como leitura da estação.
+            return $this->todayDischarge === null ? 'unmonitored' : 'modeled';
+        }
+
+        if ($reading->isStale()) {
+            return 'stale';
         }
 
         if ($this->critical_level !== null && $reading->value >= $this->critical_level) {
@@ -50,8 +86,9 @@ class Station extends Model
             return 'alert';
         }
 
+        // Há leitura fresca, mas sem cota publicada não dá para dizer que está normal.
         return $this->alert_level === null && $this->critical_level === null
-            ? 'unknown'
+            ? 'unrated'
             : 'normal';
     }
 

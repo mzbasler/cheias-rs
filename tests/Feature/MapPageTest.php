@@ -70,6 +70,6 @@ class MapPageTest extends TestCase
 
         $this->assertCount(1, $stations);
         $this->assertNull($stations[0]['reading']);
-        $this->assertSame('unknown', $stations[0]['status']);
+        $this->assertSame('unmonitored', $stations[0]['status']);
     }
 }
