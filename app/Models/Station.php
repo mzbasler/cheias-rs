@@ -28,42 +28,45 @@ class Station extends Model
     }
 
     /**
-     * Estado do ponto.
+     * Estado do ponto: 'critical', 'alert', 'normal' ou 'unknown'.
      *
-     * Distingue "não temos leitura desta estação" de "a transmissão parou": a
-     * primeira é entrada de catálogo, a segunda é sensor mudo durante cheia.
-     * Tratar as duas com o mesmo símbolo esconde a que pede atenção.
+     * 'unknown' cobre tudo que impede afirmar algo sobre o rio — sem leitura,
+     * leitura velha, ou estação sem cota publicada. Nenhum desses casos pode
+     * ser apresentado como normal.
      */
     public function status(): string
     {
         $reading = $this->latestReading;
 
-        if ($reading === null) {
-            return 'unmonitored';
-        }
-
-        if ($reading->isStale()) {
-            return 'stale';
+        if ($reading === null || $reading->isStale()) {
+            return 'unknown';
         }
 
         if ($this->critical_level !== null && $reading->value >= $this->critical_level) {
             return 'critical';
         }
 
-        if ($this->alert_level !== null && $reading->value >= $this->alert_level) {
+        $alertLevel = $this->alertLevel();
+
+        if ($alertLevel !== null && $reading->value >= $alertLevel) {
             return 'alert';
         }
 
-        if ($this->attention_level !== null && $reading->value >= $this->attention_level) {
-            return 'attention';
-        }
+        return $alertLevel === null && $this->critical_level === null ? 'unknown' : 'normal';
+    }
 
-        // Há leitura fresca, mas sem cota publicada não dá para dizer que está normal.
-        $hasReferenceLevel = $this->attention_level !== null
-            || $this->alert_level !== null
-            || $this->critical_level !== null;
+    /**
+     * O SGB publica "atenção" abaixo de "alerta"; para o mapa são o mesmo aviso.
+     * Vale o limiar mais baixo: avisar antes é mais seguro que avisar depois.
+     */
+    public function alertLevel(): ?float
+    {
+        $levels = array_filter(
+            [$this->attention_level, $this->alert_level],
+            fn (?float $level): bool => $level !== null,
+        );
 
-        return $hasReferenceLevel ? 'normal' : 'unrated';
+        return $levels === [] ? null : min($levels);
     }
 
     protected function casts(): array

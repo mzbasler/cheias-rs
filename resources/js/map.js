@@ -7,23 +7,16 @@ import 'leaflet/dist/leaflet.css';
  */
 const STATUS = {
     critical: { label: 'Inundação', color: '#d03b3b', shape: 'octagon', size: 30 },
-    alert: { label: 'Alerta', color: '#e2711d', shape: 'diamond', size: 28 },
-    attention: { label: 'Atenção', color: '#fab219', shape: 'triangle', size: 27 },
+    alert: { label: 'Alerta', color: '#fab219', shape: 'triangle', size: 28 },
     normal: { label: 'Normal', color: '#0ca30c', shape: 'check', size: 26 },
-    stale: { label: 'Sem transmissão', color: '#8a5a00', shape: 'dashed', size: 26 },
-    unrated: { label: 'Sem cota', color: '#2a78d6', shape: 'square', size: 24 },
-    unmonitored: { label: 'Sem leitura', color: '#8c8a85', shape: 'dot', size: 12 },
+    unknown: { label: 'Sem leitura', color: '#8c8a85', shape: 'dashed', size: 24 },
 };
 
 const SHAPES = {
     check: '<circle cx="12" cy="12" r="9" fill="COLOR" stroke="#fff" stroke-width="2.5"/><path d="M8 12.3l2.6 2.6L16 9.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
     triangle: '<path d="M12 2.5L22.5 20.5H1.5z" fill="COLOR" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 9v4.4" stroke="#3d2c00" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.8" r="1.3" fill="#3d2c00"/>',
     octagon: '<path d="M8.2 2.5h7.6l5.7 5.7v7.6l-5.7 5.7H8.2l-5.7-5.7V8.2z" fill="COLOR" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 7.5v5.2" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="16.4" r="1.4" fill="#fff"/>',
-    square: '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="COLOR" stroke="#fff" stroke-width="2.4"/>',
     dashed: '<circle cx="12" cy="12" r="9" fill="#fff" stroke="COLOR" stroke-width="2.6" stroke-dasharray="3.6 3.2"/><path d="M12 7.6v5" stroke="COLOR" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.3" fill="COLOR"/>',
-    diamond: '<path d="M12 2.8L21.2 12 12 21.2 2.8 12z" fill="COLOR" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/>',
-    // Sem ícone de aviso: é um ponto no catálogo, não uma ocorrência.
-    dot: '<circle cx="12" cy="12" r="6.5" fill="COLOR" stroke="#fff" stroke-width="3"/>',
 };
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', {
@@ -43,7 +36,7 @@ const number = (value, digits = 2) =>
     value.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 function icon(status) {
-    const { color, shape, label, size } = STATUS[status] ?? STATUS.unmonitored;
+    const { color, shape, label, size } = STATUS[status] ?? STATUS.unknown;
     const half = size / 2;
 
     return L.divIcon({
@@ -85,7 +78,6 @@ function measuredBlock(station) {
  */
 function levelScale(station) {
     const marks = [
-        ['Atenção', station.attentionLevel, STATUS.attention.color],
         ['Alerta', station.alertLevel, STATUS.alert.color],
         ['Inundação', station.criticalLevel, STATUS.critical.color],
     ].filter(([, value]) => value !== null);
@@ -113,7 +105,7 @@ function levelScale(station) {
 }
 
 function popup(station) {
-    const status = STATUS[station.status] ?? STATUS.unmonitored;
+    const status = STATUS[station.status] ?? STATUS.unknown;
     const place = [station.river, station.municipality].filter(Boolean).join(' · ');
     const source = station.reading.source;
 
@@ -146,7 +138,7 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).a
 const layers = {};
 
 stations.forEach((station) => {
-    const status = STATUS[station.status] ?? STATUS.unmonitored;
+    const status = STATUS[station.status] ?? STATUS.unknown;
 
     const marker = L.marker([station.latitude, station.longitude], {
         icon: icon(station.status),

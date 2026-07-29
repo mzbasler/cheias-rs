@@ -22,8 +22,7 @@ class MapController extends Controller
                 'latitude' => $station->latitude,
                 'longitude' => $station->longitude,
                 'unit' => $station->unit,
-                'attentionLevel' => $station->attention_level,
-                'alertLevel' => $station->alert_level,
+                'alertLevel' => $station->alertLevel(),
                 'criticalLevel' => $station->critical_level,
                 'status' => $station->status(),
                 'reading' => [

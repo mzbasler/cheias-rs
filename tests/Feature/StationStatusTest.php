@@ -10,15 +10,11 @@ class StationStatusTest extends TestCase
 {
     use RefreshDatabase;
 
-    /**
-     * Estação de catálogo é presença no mapa, não ocorrência: não pode dividir o
-     * símbolo com um sensor que parou de reportar.
-     */
-    public function test_station_that_never_reported_is_unmonitored(): void
+    public function test_station_without_reading_is_unknown(): void
     {
         $station = $this->station();
 
-        $this->assertSame('unmonitored', $station->status());
+        $this->assertSame('unknown', $station->status());
     }
 
     public function test_reading_below_every_reference_level_is_normal(): void
@@ -29,14 +25,14 @@ class StationStatusTest extends TestCase
     }
 
     /**
-     * O SGB publica três cotas. Rio já em atenção não pode aparecer como normal
-     * só porque ainda não chegou no alerta.
+     * O SGB publica "atenção" abaixo de "alerta". Como o mapa trata as duas como
+     * o mesmo aviso, vale o limiar mais baixo — avisar antes é mais seguro.
      */
-    public function test_reading_at_attention_level_is_attention(): void
+    public function test_alert_starts_at_the_lowest_published_threshold(): void
     {
         $station = $this->stationWithReading(1.80);
 
-        $this->assertSame('attention', $station->status());
+        $this->assertSame('alert', $station->status());
     }
 
     public function test_reading_at_alert_level_is_alert(): void
@@ -54,25 +50,21 @@ class StationStatusTest extends TestCase
     }
 
     /**
-     * Sensor mudo durante cheia não pode aparecer como "normal" — o rio pode ter
-     * subido desde a última leitura. E é distinto de nunca ter reportado: aqui há
-     * um feed que parou, o que merece atenção.
+     * Sensor mudo durante cheia não pode aparecer como "normal": o rio pode ter
+     * subido desde a última leitura.
      */
-    public function test_reading_older_than_the_stale_window_is_stale_even_when_below_alert_level(): void
+    public function test_reading_older_than_the_stale_window_is_unknown(): void
     {
         $station = $this->stationWithReading(
             0.10,
             now()->subHours(Station::STALE_AFTER_HOURS + 1),
         );
 
-        $this->assertSame('stale', $station->status());
+        $this->assertSame('unknown', $station->status());
     }
 
-    /**
-     * Sem cota publicada não há como afirmar que o nível está normal — mas a
-     * leitura existe e é recente, então também não é "sem monitoramento".
-     */
-    public function test_fresh_reading_without_reference_levels_is_unrated(): void
+    /** Sem cota publicada não há como afirmar que o nível está normal. */
+    public function test_fresh_reading_without_reference_levels_is_unknown(): void
     {
         $station = $this->station([
             'attention_level' => null,
@@ -85,7 +77,7 @@ class StationStatusTest extends TestCase
             'source' => 'test',
         ]);
 
-        $this->assertSame('unrated', $station->fresh()->status());
+        $this->assertSame('unknown', $station->fresh()->status());
     }
 
     /** @param  array<string, mixed>  $attributes */
