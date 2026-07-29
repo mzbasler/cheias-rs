@@ -263,6 +263,52 @@
     line-height: 1.6 !important;
 }
 
+/* ---- Card no celular: folha quase cheia ----
+
+   Ancorar o card num pin de 26 px numa tela de 6" sobra pouco espaço para o
+   conteúdo e ainda tapa o mapa em volta. Aqui ele ocupa a viewport com uma
+   margem que deixa o mapa aparecer atrás, sinalizando que continua ali. */
+
+.is-phone .leaflet-popup {
+    position: fixed !important;
+    inset: 0.75rem;
+    margin: 0 !important;
+    transform: none !important;
+    width: auto;
+}
+
+/* A seta aponta para um pin que já não está sob o card. */
+.is-phone .leaflet-popup-tip-container {
+    display: none;
+}
+
+.is-phone .leaflet-popup-content-wrapper {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    border-radius: 0.75rem;
+    padding: 0;
+}
+
+.is-phone .leaflet-popup-content {
+    flex: 1;
+    max-height: none;
+    margin: 0;
+    padding: 0.9rem 1rem;
+}
+
+/* Alvo grande e opaco: é o botão de sair de uma tela cheia, não um "x" de canto. */
+.is-phone .leaflet-popup-close-button {
+    top: 0.35rem !important;
+    right: 0.35rem !important;
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.9);
+    font-size: 1.4rem !important;
+    line-height: 2.1 !important;
+}
+
 /* ---- Cabeçalho ---- */
 
 /* Nome e estado na mesma linha: o estado é um selo, não um terceiro parágrafo.

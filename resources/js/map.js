@@ -289,6 +289,10 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
  */
 const layers = {};
 
+// No celular o card vira folha quase cheia, posicionada pelo CSS. A classe no
+// body é o que separa esse caso do desktop, onde o card segue ancorado no pin.
+document.body.classList.toggle('is-phone', onPhone());
+
 /**
  * Largura e altura do card ficam no CSS, não aqui. Medida em pixels no
  * carregamento não acompanha rotação nem troca de tela; `maxWidth: 0` desliga o
@@ -299,6 +303,8 @@ const POPUP_OPTIONS = {
     minWidth: 0,
     // Folga para o card não abrir por baixo do botão de filtros nem colar no topo.
     autoPanPadding: [16, 16],
+    // Na folha cheia não há o que reposicionar: mover o mapa só desorienta.
+    autoPan: !onPhone(),
 };
 
 stations.forEach((station) => {
