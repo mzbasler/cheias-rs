@@ -300,16 +300,18 @@ function popup(station) {
                 <section>
                     <h3>O que fazer agora</h3>
                     <p class="popup-action">${ACTION[station.status] ?? ACTION.unknown}</p>
-
-                    <h3>Cotas deste ponto</h3>
-                    ${levelTable(station)}
                 </section>
 
                 <section>
-                    <h3>Últimas 24 horas</h3>
-                    ${historyBlock(station)}
+                    <h3>Cotas deste ponto</h3>
+                    ${levelTable(station)}
                 </section>
             </div>
+
+            <section class="popup-chart-block">
+                <h3>Últimas 24 horas</h3>
+                ${historyBlock(station)}
+            </section>
 
             <p class="popup-source">${escape(SOURCE_LABEL[source] ?? source)}</p>
         </details>
@@ -345,7 +347,7 @@ const layers = {};
  * No desktop o card usa a largura para deixar de ser uma coluna alta; no celular
  * fica preso à viewport, com folga para o popup não colar nas bordas.
  */
-const POPUP_MAX_WIDTH = Math.max(236, Math.min(380, window.innerWidth - 40));
+const POPUP_MAX_WIDTH = Math.max(236, Math.min(420, window.innerWidth - 40));
 
 stations.forEach((station) => {
     const status = STATUS[station.status] ?? STATUS.unknown;
