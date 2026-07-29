@@ -21,11 +21,22 @@ class StationStatusTest extends TestCase
         $this->assertSame('unmonitored', $station->status());
     }
 
-    public function test_reading_below_alert_level_is_normal(): void
+    public function test_reading_below_every_reference_level_is_normal(): void
     {
-        $station = $this->stationWithReading(2.00);
+        $station = $this->stationWithReading(1.50);
 
         $this->assertSame('normal', $station->status());
+    }
+
+    /**
+     * O SGB publica três cotas. Rio já em atenção não pode aparecer como normal
+     * só porque ainda não chegou no alerta.
+     */
+    public function test_reading_at_attention_level_is_attention(): void
+    {
+        $station = $this->stationWithReading(1.80);
+
+        $this->assertSame('attention', $station->status());
     }
 
     public function test_reading_at_alert_level_is_alert(): void
@@ -63,7 +74,11 @@ class StationStatusTest extends TestCase
      */
     public function test_fresh_reading_without_reference_levels_is_unrated(): void
     {
-        $station = $this->station(['alert_level' => null, 'critical_level' => null]);
+        $station = $this->station([
+            'attention_level' => null,
+            'alert_level' => null,
+            'critical_level' => null,
+        ]);
         $station->readings()->create([
             'value' => 1.0,
             'measured_at' => now(),
@@ -82,6 +97,7 @@ class StationStatusTest extends TestCase
             'name' => 'Estação de teste',
             'latitude' => -30.0,
             'longitude' => -51.2,
+            'attention_level' => 1.80,
             'alert_level' => 2.15,
             'critical_level' => 2.50,
             'unit' => 'm',

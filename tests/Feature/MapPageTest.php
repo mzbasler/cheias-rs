@@ -51,10 +51,10 @@ class MapPageTest extends TestCase
     }
 
     /**
-     * Estação mapeada sem leitura vai para o mapa mesmo assim — mas com
-     * `reading` nulo, para a interface dizer "sem leitura" em vez de inventar.
+     * Estação catalogada sem medição não vai ao mapa: um pin que não mede nada
+     * só disputa atenção com os que medem.
      */
-    public function test_it_publishes_mapped_stations_that_have_no_reading(): void
+    public function test_it_omits_stations_that_have_no_reading(): void
     {
         Station::create([
             'source' => 'snirh',
@@ -66,10 +66,6 @@ class MapPageTest extends TestCase
             'unit' => 'm',
         ]);
 
-        $stations = $this->get('/')->viewData('stations');
-
-        $this->assertCount(1, $stations);
-        $this->assertNull($stations[0]['reading']);
-        $this->assertSame('unmonitored', $stations[0]['status']);
+        $this->assertCount(0, $this->get('/')->viewData('stations'));
     }
 }

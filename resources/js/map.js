@@ -6,16 +6,13 @@ import 'leaflet/dist/leaflet.css';
  * em daltonismo, sob sol forte ou em impressão P&B, a forma ainda distingue.
  */
 const STATUS = {
+    critical: { label: 'Inundação', color: '#d03b3b', shape: 'octagon', size: 30 },
+    alert: { label: 'Alerta', color: '#e2711d', shape: 'diamond', size: 28 },
+    attention: { label: 'Atenção', color: '#fab219', shape: 'triangle', size: 27 },
     normal: { label: 'Normal', color: '#0ca30c', shape: 'check', size: 26 },
-    alert: { label: 'Alerta', color: '#fab219', shape: 'triangle', size: 28 },
-    critical: { label: 'Crítico', color: '#d03b3b', shape: 'octagon', size: 30 },
-    unrated: { label: 'Medindo, sem cota de referência', color: '#2a78d6', shape: 'square', size: 24 },
-    stale: { label: 'Sensor sem reportar', color: '#8a5a00', shape: 'dashed', size: 26 },
-    // Sem nível medido, mas com vazão estimada por modelo — dado real, natureza
-    // diferente: por isso losango, e nunca as cores de alerta.
-    modeled: { label: 'Vazão estimada', color: '#5b7fa6', shape: 'diamond', size: 16 },
-    // Estação catalogada da qual não recebemos nada: presença, não alarme.
-    unmonitored: { label: 'Estação mapeada, sem leitura', color: '#8c8a85', shape: 'dot', size: 11 },
+    stale: { label: 'Sem transmissão', color: '#8a5a00', shape: 'dashed', size: 26 },
+    unrated: { label: 'Sem cota', color: '#2a78d6', shape: 'square', size: 24 },
+    unmonitored: { label: 'Sem leitura', color: '#8c8a85', shape: 'dot', size: 12 },
 };
 
 const SHAPES = {
@@ -38,9 +35,12 @@ const dateFormat = new Intl.DateTimeFormat('pt-BR', {
 });
 
 const SOURCE_LABEL = {
-    sigdc: 'Defesa Civil (SIGDC)',
-    snirh: 'Inventário ANA/SNIRH',
+    sigdc: 'Defesa Civil de Eldorado do Sul (SIGDC)',
+    sace: 'SGB/CPRM — SACE',
 };
+
+const number = (value, digits = 2) =>
+    value.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 function icon(status) {
     const { color, shape, label, size } = STATUS[status] ?? STATUS.unmonitored;
@@ -62,88 +62,67 @@ function escape(value) {
     return element.innerHTML;
 }
 
-function readingBlock(station) {
+function measuredBlock(station) {
     const { reading, unit } = station;
-
-    if (reading === null) {
-        return `
-            <p class="popup-empty">Sem nível medido</p>
-            <p class="popup-note">Estação catalogada pela ANA — ainda não recebemos
-            a medição de nível dela.</p>
-        `;
-    }
-
-    const measured = dateFormat.format(new Date(reading.measuredAt));
 
     // Leitura velha aparece — mas nunca sem o carimbo que a denuncia como velha.
     const staleWarning = reading.stale
-        ? `<p class="popup-stale">O sensor parou de reportar. Esta leitura é antiga e
-           pode não representar o rio agora.</p>`
+        ? '<p class="popup-stale">Transmissão interrompida · leitura desatualizada</p>'
         : '';
 
     return `
-        <p class="popup-value">${reading.value.toFixed(2).replace('.', ',')}<span>${escape(unit ?? 'm')}</span></p>
-        <p class="popup-note">Medido em ${measured}</p>
+        <p class="popup-kind">Nível</p>
+        <p class="popup-value">${number(reading.value)}<span>${escape(unit ?? 'm')}</span></p>
+        <p class="popup-note">${dateFormat.format(new Date(reading.measuredAt))}</p>
         ${staleWarning}
+        ${levelScale(station)}
     `;
 }
-
-function levelsBlock(station) {
-    const levels = [];
-
-    if (station.alertLevel !== null) {
-        levels.push(`alerta ${station.alertLevel.toFixed(2).replace('.', ',')}`);
-    }
-
-    if (station.criticalLevel !== null) {
-        levels.push(`crítico ${station.criticalLevel.toFixed(2).replace('.', ',')}`);
-    }
-
-    return levels.length > 0
-        ? `<p class="popup-note">Cotas: ${levels.join(' · ')} ${escape(station.unit ?? 'm')}</p>`
-        : `<p class="popup-note">Sem cota de referência publicada.</p>`;
-}
-
-const TREND_LABEL = {
-    rising: 'subindo nos próximos dias',
-    falling: 'baixando nos próximos dias',
-    steady: 'estável nos próximos dias',
-};
 
 /**
- * Bloco separado e rotulado: vazão de modelo não é medição da estação, e num app
- * de cheia confundir as duas é o erro mais caro possível.
+ * Régua das cotas oficiais com a leitura marcada. O número sozinho não diz nada a
+ * quem não conhece o rio; a distância até a inundação diz.
  */
-function dischargeBlock(station) {
-    if (station.discharge === null) {
-        return '';
+function levelScale(station) {
+    const marks = [
+        ['Atenção', station.attentionLevel, STATUS.attention.color],
+        ['Alerta', station.alertLevel, STATUS.alert.color],
+        ['Inundação', station.criticalLevel, STATUS.critical.color],
+    ].filter(([, value]) => value !== null);
+
+    if (marks.length === 0) {
+        return '<p class="popup-note">Sem cota de referência publicada.</p>';
     }
 
-    const { value, trend } = station.discharge;
-    const trendText = trend === null ? '' : ` · ${TREND_LABEL[trend]}`;
+    // Só chamada de dentro de measuredBlock, que já garantiu haver leitura.
+    const rows = marks
+        .map(([label, value, color]) => {
+            const reached = station.reading.value >= value;
 
-    return `
-        <p class="popup-modeled">
-            <strong>${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m³/s</strong>
-            de vazão estimada${trendText}
-        </p>
-        <p class="popup-note">Estimativa do modelo GloFAS para este ponto do rio —
-        não é medição da estação.</p>
-    `;
+            return `
+                <li class="${reached ? 'is-reached' : ''}" style="--mark:${color}">
+                    <span>${label}</span>
+                    <strong>${number(value)} m</strong>
+                    <em>${reached ? 'atingida' : `faltam ${number(value - station.reading.value)} m`}</em>
+                </li>
+            `;
+        })
+        .join('');
+
+    return `<ul class="popup-scale">${rows}</ul>`;
 }
 
 function popup(station) {
     const status = STATUS[station.status] ?? STATUS.unmonitored;
     const place = [station.river, station.municipality].filter(Boolean).join(' · ');
+    const source = station.reading.source;
 
     return `
         <h2 class="popup-title">${escape(station.name)}</h2>
         ${place ? `<p class="popup-place">${escape(place)}</p>` : ''}
         <p class="popup-status" style="--status:${status.color}">${status.label}</p>
-        ${readingBlock(station)}
-        ${levelsBlock(station)}
-        ${dischargeBlock(station)}
-        <p class="popup-source">Fonte: ${escape(SOURCE_LABEL[station.source] ?? station.source)}</p>
+        ${measuredBlock(station)}
+        <p class="popup-source">${escape(SOURCE_LABEL[source] ?? source)}</p>
     `;
 }
 
@@ -160,34 +139,87 @@ const map = L.map('map', {
 
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
 
-L.control.zoom({ position: 'bottomright' }).addTo(map);
+/**
+ * Uma camada por estado, para a legenda poder ligar e desligar cada um. Numa
+ * cheia, o que importa é isolar as estações em risco entre centenas de pins.
+ */
+const layers = {};
 
+stations.forEach((station) => {
+    const status = STATUS[station.status] ?? STATUS.unmonitored;
+
+    const marker = L.marker([station.latitude, station.longitude], {
+        icon: icon(station.status),
+        title: `${station.name} — ${status.label}`,
+        alt: `${station.name} — ${status.label}`,
+        riseOnHover: true,
+    });
+
+    // Largura mínima: sem ela o Leaflet aperta o popup até a régua de cotas
+    // quebrar linha. Máxima para não virar uma faixa larga no celular.
+    marker.bindPopup(popup(station), { minWidth: 244, maxWidth: 288 });
+
+    (layers[station.status] ??= L.layerGroup().addTo(map)).addLayer(marker);
+});
+
+/** A ordem de STATUS já vai do mais grave ao menos — a legenda a reaproveita. */
 const legend = L.control({ position: 'bottomleft' });
 
 legend.onAdd = () => {
-    const live = stations.filter((station) => station.reading !== null).length;
-    const modeled = stations.filter((station) => station.status === 'modeled').length;
+    const container = L.DomUtil.create('div', 'legend');
 
-    const swatch = (key, size = 16) => {
-        const { color, shape } = STATUS[key];
+    const rows = Object.keys(STATUS)
+        .filter((key) => layers[key] !== undefined)
+        .map((key) => {
+            const { label, color, shape } = STATUS[key];
 
-        return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">${SHAPES[shape].replaceAll('COLOR', color)}</svg>`;
-    };
-
-    const entries = ['normal', 'alert', 'critical', 'stale']
-        .map((key) => `<li>${swatch(key)}${STATUS[key].label}</li>`)
+            return `
+                <li>
+                    <button type="button" data-status="${key}" aria-pressed="true">
+                        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">${SHAPES[shape].replaceAll('COLOR', color)}</svg>
+                        <span>${label}</span>
+                        <em>${layers[key].getLayers().length}</em>
+                    </button>
+                </li>
+            `;
+        })
         .join('');
 
-    const container = L.DomUtil.create('div', 'legend');
     container.innerHTML = `
-        <p class="legend-heading">Nível medido <span>${live}</span></p>
-        <ul class="legend-list">${entries}</ul>
-        <p class="legend-heading legend-heading--spaced">Só vazão estimada <span>${modeled}</span></p>
-        <p class="legend-note">
-            ${swatch('modeled', 13)} Modelo GloFAS, não é medição da estação
-        </p>
+        <button type="button" class="legend-toggle" aria-expanded="false" aria-controls="legend-panel">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                <path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            Filtros
+        </button>
+        <div class="legend-panel" id="legend-panel" hidden>
+            <ul class="legend-list">${rows}</ul>
+        </div>
         <p class="legend-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></p>
     `;
+
+    const toggle = container.querySelector('.legend-toggle');
+    const panel = container.querySelector('.legend-panel');
+
+    toggle.addEventListener('click', () => {
+        panel.hidden = !panel.hidden;
+        toggle.setAttribute('aria-expanded', String(!panel.hidden));
+    });
+
+    container.querySelectorAll('button[data-status]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const layer = layers[button.dataset.status];
+            const visible = map.hasLayer(layer);
+
+            if (visible) {
+                map.removeLayer(layer);
+            } else {
+                map.addLayer(layer);
+            }
+
+            button.setAttribute('aria-pressed', String(!visible));
+        });
+    });
 
     // Sem isso, arrastar ou rolar sobre a legenda move o mapa por baixo dela.
     L.DomEvent.disableClickPropagation(container);
@@ -206,16 +238,3 @@ if (sessionStorage.getItem('disclaimer-seen') === null) {
     disclaimer.showModal();
     disclaimer.addEventListener('close', () => sessionStorage.setItem('disclaimer-seen', '1'), { once: true });
 }
-
-stations.forEach((station) => {
-    const status = STATUS[station.status] ?? STATUS.unknown;
-
-    L.marker([station.latitude, station.longitude], {
-        icon: icon(station.status),
-        title: `${station.name} — ${status.label}`,
-        alt: `${station.name} — ${status.label}`,
-        riseOnHover: true,
-    })
-        .addTo(map)
-        .bindPopup(popup(station), { maxWidth: 260 });
-});

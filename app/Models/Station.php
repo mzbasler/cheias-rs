@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -11,8 +10,8 @@ class Station extends Model
 {
     /**
      * Leitura mais velha que isto não representa mais o rio agora. Os sensores
-     * do SIGDC reportam a cada ~30 min; 3 h cobre falhas curtas sem mascarar
-     * um sensor mudo durante uma cheia.
+     * reportam a cada 15–30 min; 3 h cobre falhas curtas sem mascarar um sensor
+     * mudo durante uma cheia.
      */
     public const STALE_AFTER_HOURS = 3;
 
@@ -23,55 +22,24 @@ class Station extends Model
         return $this->hasMany(Reading::class);
     }
 
-    /**
-     * O filtro de métrica vai dentro do `ofMany`: encadeado por fora, ele só
-     * seria aplicado depois de a subconsulta já ter escolhido a linha mais
-     * recente — e uma vazão do mesmo instante roubaria o lugar do nível.
-     */
     public function latestReading(): HasOne
     {
-        return $this->hasOne(Reading::class)->ofMany(
-            ['measured_at' => 'max'],
-            fn (Builder $query) => $query->where('metric', Reading::METRIC_LEVEL),
-        );
-    }
-
-    /**
-     * Vazão estimada pelo modelo para hoje. Não substitui a medição de nível:
-     * é outra grandeza, de outra natureza, e só existe porque cobre as estações
-     * cujas leituras ainda não temos.
-     */
-    public function todayDischarge(): HasOne
-    {
-        return $this->hasOne(Reading::class)
-            ->where('metric', Reading::METRIC_DISCHARGE)
-            ->whereDate('measured_at', now()->toDateString());
-    }
-
-    public function dischargeForecast(): HasMany
-    {
-        return $this->hasMany(Reading::class)
-            ->where('metric', Reading::METRIC_DISCHARGE)
-            ->where('measured_at', '>=', now()->startOfDay())
-            ->orderBy('measured_at');
+        return $this->hasOne(Reading::class)->latestOfMany('measured_at');
     }
 
     /**
      * Estado do ponto.
      *
-     * Distingue "não temos feed desta estação" de "o feed calou": a primeira é
-     * uma entrada de catálogo, a segunda é um sensor mudo durante cheia. Tratar
-     * as duas com o mesmo símbolo transforma o mapa em ruído e esconde a que
-     * realmente pede atenção.
+     * Distingue "não temos leitura desta estação" de "a transmissão parou": a
+     * primeira é entrada de catálogo, a segunda é sensor mudo durante cheia.
+     * Tratar as duas com o mesmo símbolo esconde a que pede atenção.
      */
     public function status(): string
     {
         $reading = $this->latestReading;
 
         if ($reading === null) {
-            // Sem nível medido, mas com vazão modelada: há o que mostrar, desde
-            // que rotulado como estimativa e nunca como leitura da estação.
-            return $this->todayDischarge === null ? 'unmonitored' : 'modeled';
+            return 'unmonitored';
         }
 
         if ($reading->isStale()) {
@@ -86,10 +54,16 @@ class Station extends Model
             return 'alert';
         }
 
+        if ($this->attention_level !== null && $reading->value >= $this->attention_level) {
+            return 'attention';
+        }
+
         // Há leitura fresca, mas sem cota publicada não dá para dizer que está normal.
-        return $this->alert_level === null && $this->critical_level === null
-            ? 'unrated'
-            : 'normal';
+        $hasReferenceLevel = $this->attention_level !== null
+            || $this->alert_level !== null
+            || $this->critical_level !== null;
+
+        return $hasReferenceLevel ? 'normal' : 'unrated';
     }
 
     protected function casts(): array
@@ -97,6 +71,7 @@ class Station extends Model
         return [
             'latitude' => 'float',
             'longitude' => 'float',
+            'attention_level' => 'float',
             'alert_level' => 'float',
             'critical_level' => 'float',
         ];

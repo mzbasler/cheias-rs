@@ -9,7 +9,10 @@ class MapController extends Controller
 {
     public function __invoke(): View
     {
-        $stations = Station::with(['latestReading', 'todayDischarge', 'dischargeForecast'])
+        // Só vai ao mapa quem tem leitura própria. Estação catalogada sem medição
+        // não informa nada — vira ruído sobre as que informam.
+        $stations = Station::with('latestReading')
+            ->whereHas('readings')
             ->orderBy('name')
             ->get()
             ->map(fn (Station $station): array => [
@@ -19,51 +22,19 @@ class MapController extends Controller
                 'latitude' => $station->latitude,
                 'longitude' => $station->longitude,
                 'unit' => $station->unit,
+                'attentionLevel' => $station->attention_level,
                 'alertLevel' => $station->alert_level,
                 'criticalLevel' => $station->critical_level,
                 'status' => $station->status(),
-                'source' => $station->source,
-                'reading' => $station->latestReading === null ? null : [
+                'reading' => [
                     'value' => $station->latestReading->value,
                     // Sempre acompanhado do instante: leitura sem hora não circula.
                     'measuredAt' => $station->latestReading->measured_at->toIso8601String(),
                     'stale' => $station->latestReading->isStale(),
-                ],
-                'discharge' => $station->todayDischarge === null ? null : [
-                    'value' => $station->todayDischarge->value,
-                    'day' => $station->todayDischarge->measured_at->toDateString(),
-                    'trend' => $this->dischargeTrend($station),
+                    'source' => $station->latestReading->source,
                 ],
             ]);
 
         return view('map', ['stations' => $stations]);
-    }
-
-    /**
-     * Compara a vazão de hoje com a do último dia previsto: 'rising', 'falling'
-     * ou 'steady'. O limiar de 10% evita chamar de tendência o ruído do modelo.
-     */
-    private function dischargeTrend(Station $station): ?string
-    {
-        $forecast = $station->dischargeForecast;
-
-        if ($forecast->count() < 2) {
-            return null;
-        }
-
-        $first = $forecast->first()->value;
-        $last = $forecast->last()->value;
-
-        if ($first <= 0.0) {
-            return null;
-        }
-
-        $change = ($last - $first) / $first;
-
-        return match (true) {
-            $change >= 0.10 => 'rising',
-            $change <= -0.10 => 'falling',
-            default => 'steady',
-        };
     }
 }
