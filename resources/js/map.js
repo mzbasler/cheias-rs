@@ -438,14 +438,27 @@ const ICON_CAMERA =
 if (onPhone()) {
     const here = L.layerGroup().addTo(map);
 
-    /** Abaixo disto o fixo é de GPS e não vale seguir gastando bateria. */
-    const GOOD_ENOUGH_METRES = 30;
+    /**
+     * Precisão que georreferencia um relato: abaixo disto o fixo é de GPS e
+     * identifica a rua. Acima de COARSE_METRES a posição veio da rede e não
+     * localiza ninguém — é o limite que o envio de foto vai exigir.
+     */
+    const GOOD_ENOUGH_METRES = 15;
 
-    /** Depois disto o sinal não vai melhorar mais — normalmente é rede, não GPS. */
-    const REFINE_TIMEOUT_MS = 20000;
+    const COARSE_METRES = 100;
+
+    /**
+     * GPS frio leva de 30 a 60 s para travar, e o primeiro fixo é sempre de rede.
+     * Cortar em 20 s desistia justamente antes de o GPS entrar.
+     */
+    const REFINE_TIMEOUT_MS = 60000;
 
     let centred = false;
+    let bestAccuracy = Infinity;
     let giveUp = null;
+
+    const readout = document.getElementById('locate-readout');
+    const coarseNotice = document.getElementById('locate-coarse');
 
     function stopLocating() {
         map.stopLocate();
@@ -458,8 +471,13 @@ if (onPhone()) {
         icon: ICON_LOCATE,
         onClick: () => {
             centred = false;
+            bestAccuracy = Infinity;
             clearTimeout(giveUp);
             giveUp = setTimeout(stopLocating, REFINE_TIMEOUT_MS);
+
+            readout.textContent = 'Localizando… aguarde o GPS';
+            readout.hidden = false;
+            coarseNotice.hidden = true;
 
             // `watch` em vez de leitura única: o primeiro fixo do navegador vem da
             // rede, com centenas de metros de erro, e o GPS só refina ao longo de
@@ -475,7 +493,28 @@ if (onPhone()) {
     });
 
     map.on('locationfound', (event) => {
+        // O navegador emite fixos cada vez melhores; um fixo pior que o já obtido
+        // é ruído do rádio e não deve mover a marca de volta.
+        if (event.accuracy > bestAccuracy) {
+            return;
+        }
+
+        bestAccuracy = event.accuracy;
+
         const metres = Math.round(event.accuracy);
+        const { lat, lng } = event.latlng;
+
+        // Coordenada crua à vista: é o que permite comparar com outro app e saber
+        // se o desvio vem do navegador ou daqui.
+        readout.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)} · ±${metres} m`;
+        readout.hidden = false;
+
+        // Posição grosseira não é posição. Dizer isso é melhor que desenhar um
+        // ponto de aparência exata a quilômetros de onde a pessoa está.
+        const coarse = metres > COARSE_METRES;
+
+        readout.dataset.coarse = String(coarse);
+        coarseNotice.hidden = !coarse;
 
         here.clearLayers();
 
@@ -516,13 +555,8 @@ if (onPhone()) {
     map.on('locationerror', (event) => {
         stopLocating();
 
-        // Origem insegura é a causa mais comum de posição errada em teste: fora de
-        // HTTPS o navegador nega o GPS e devolve localização por rede.
-        const insecure = window.isSecureContext
-            ? ''
-            : ' A página não está em HTTPS, e sem isso o navegador não libera o GPS.';
-
-        window.alert(`Não foi possível obter sua localização: ${event.message}.${insecure}`);
+        readout.textContent = `Falhou: ${event.message}`;
+        readout.hidden = false;
     });
 
     const photoNotice = document.getElementById('photo-notice');
