@@ -1,8 +1,10 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+// As leituras mudam a cada ~30 min na origem; 15 min mantém o mapa próximo do
+// rio sem martelar a Defesa Civil.
+Schedule::command('import:sigdc')->everyFifteenMinutes()->withoutOverlapping();
+
+// O inventário de estações é catálogo, não medição: muda em escala de meses.
+Schedule::command('import:snirh')->weeklyOn(1, '04:00')->withoutOverlapping();
