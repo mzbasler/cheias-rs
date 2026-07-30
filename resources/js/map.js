@@ -524,14 +524,208 @@ const ICON_CAMERA =
 
 }
 
-// A foto depende de câmera na mão, então esse segue só no celular.
-if (onPhone()) {
-    const photoNotice = document.getElementById('photo-notice');
+/* ---- Relato com foto ---------------------------------------------------- */
+
+{
+    const form = document.getElementById('photo-form');
+    const fileInput = document.getElementById('photo-file');
+    const fileLabel = document.getElementById('photo-label');
+    const preview = document.getElementById('photo-preview');
+    const thumb = document.getElementById('photo-thumb');
+    const address = document.getElementById('report-address');
+    const positionText = document.getElementById('report-position');
+    const consent = document.getElementById('report-consent');
+    const status = document.getElementById('report-status');
+    const submit = document.getElementById('report-submit');
+
+    /** Coordenada do relato e de onde ela veio — medida ou apontada à mão. */
+    let picked = null;
+    let photo = null;
+    let pickerMap = null;
+    let pickerMarker = null;
+
+    function say(message) {
+        status.textContent = message;
+        status.hidden = message === '';
+    }
+
+    function describePosition() {
+        if (picked === null) {
+            positionText.textContent = 'Arraste o ponto no mapa para marcar o local exato.';
+
+            return;
+        }
+
+        const { lat, lng, source } = picked;
+        const origin = { gps: 'pelo GPS', address: 'pelo endereço', manual: 'marcado no mapa' }[source];
+
+        positionText.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)} · ${origin}`;
+    }
+
+    function setPosition(latlng, source) {
+        picked = { lat: latlng.lat, lng: latlng.lng, source };
+
+        pickerMarker.setLatLng(latlng);
+        pickerMap.setView(latlng, Math.max(pickerMap.getZoom(), 16));
+
+        describePosition();
+        refresh();
+    }
+
+    /** O botão só libera com foto, local e consentimento — e diz o que falta. */
+    function refresh() {
+        const missing = [];
+
+        if (photo === null) {
+            missing.push('a foto');
+        }
+
+        if (picked === null) {
+            missing.push('o local');
+        }
+
+        if (!consent.checked) {
+            missing.push('a autorização');
+        }
+
+        submit.disabled = missing.length > 0;
+
+        if (missing.length > 0) {
+            say(`Falta ${missing.join(', ').replace(/, ([^,]*)$/, ' e $1')}.`);
+        } else {
+            say('');
+        }
+    }
+
+    function buildPickerMap() {
+        pickerMap = L.map('report-map', { attributionControl: false }).setView(map.getCenter(), 12);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
+            maxZoom: 19,
+        }).addTo(pickerMap);
+
+        pickerMarker = L.marker(map.getCenter(), { draggable: true, autoPan: true })
+            .addTo(pickerMap)
+            .on('dragend', () => setPosition(pickerMarker.getLatLng(), 'manual'));
+
+        // Marcar tocando é mais direto que arrastar num mapa de 11 rem.
+        pickerMap.on('click', (event) => setPosition(event.latlng, 'manual'));
+    }
 
     floatingButton({
         label: 'Enviar foto do rio',
         icon: ICON_CAMERA,
-        onClick: () => photoNotice.showModal(),
+        onClick: () => {
+            form.showModal();
+
+            if (pickerMap === null) {
+                buildPickerMap();
+            }
+
+            // O Leaflet mede o container ao criar; dentro de um dialog fechado ele
+            // tem tamanho zero, e sem isto o mapa abre em branco.
+            pickerMap.invalidateSize();
+            refresh();
+        },
+    });
+
+    fileInput.addEventListener('change', () => {
+        const [file] = fileInput.files;
+
+        if (file === undefined) {
+            return;
+        }
+
+        photo = file;
+        thumb.src = URL.createObjectURL(file);
+        preview.hidden = false;
+        fileLabel.textContent = file.name;
+        refresh();
+    });
+
+    document.getElementById('photo-clear').addEventListener('click', () => {
+        URL.revokeObjectURL(thumb.src);
+        photo = null;
+        fileInput.value = '';
+        preview.hidden = true;
+        fileLabel.textContent = 'Tirar foto ou escolher do aparelho';
+        refresh();
+    });
+
+    document.getElementById('report-locate').addEventListener('click', () => {
+        say('Localizando…');
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude, accuracy } = position.coords;
+
+                setPosition(L.latLng(latitude, longitude), 'gps');
+
+                // Fixo grosseiro não é local: pedir confirmação é melhor que
+                // registrar o centro da cidade como origem da foto.
+                if (accuracy > 100) {
+                    say(`O GPS errou por até ${Math.round(accuracy)} m. Confirme o ponto no mapa.`);
+                }
+            },
+            (error) => say(`Não foi possível localizar: ${error.message}`),
+            { enableHighAccuracy: true, timeout: 20000 },
+        );
+    });
+
+    async function findAddress() {
+        const query = address.value.trim();
+
+        if (query === '') {
+            return;
+        }
+
+        say('Buscando endereço…');
+
+        try {
+            const url = new URL('https://nominatim.openstreetmap.org/search');
+
+            url.search = new URLSearchParams({
+                q: `${query}, Rio Grande do Sul, Brasil`,
+                format: 'json',
+                limit: '1',
+            });
+
+            const [found] = await fetch(url).then((response) => response.json());
+
+            if (found === undefined) {
+                say('Endereço não encontrado. Tente incluir a cidade, ou marque no mapa.');
+
+                return;
+            }
+
+            setPosition(L.latLng(Number(found.lat), Number(found.lon)), 'address');
+            say('Endereço encontrado. Confira o ponto no mapa antes de enviar.');
+        } catch {
+            say('A busca de endereço falhou. Marque o ponto no mapa.');
+        }
+    }
+
+    document.getElementById('report-find').addEventListener('click', findAddress);
+
+    // Enter no campo busca; sem isto o dialog fecha, que é o padrão do formulário.
+    address.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            findAddress();
+        }
+    });
+
+    consent.addEventListener('change', refresh);
+
+    // Não há para onde enviar ainda. Aceitar a foto e descartá-la faria alguém
+    // acreditar que pediu socorro durante uma cheia.
+    submit.addEventListener('click', () => {
+        submit.disabled = true;
+        say(
+            'O recebimento de relatos ainda não está ativo — sua foto não foi enviada a ninguém. ' +
+                'Em emergência, ligue 199 (Defesa Civil) ou 193 (Bombeiros).',
+        );
     });
 }
 

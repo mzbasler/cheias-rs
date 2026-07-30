@@ -8,6 +8,25 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
+/* Escala fechada: cinco tamanhos de fonte e quatro de espaçamento, e nada fora
+   deles. Vive no :root porque o card e a modal de foto usam a mesma régua. */
+:root {
+    --fs-title: 1rem;
+    --fs-value: 1.75rem;
+    --fs-body: 0.8rem;
+    --fs-label: 0.7rem;
+    --fs-eyebrow: 0.62rem;
+
+    --sp-hair: 0.15rem;
+    --sp-tight: 0.25rem;
+    --sp-group: 0.5rem;
+    --sp-section: 0.85rem;
+
+    --ink: var(--color-stone-900);
+    --ink-soft: var(--color-stone-600);
+    --rule: var(--color-stone-200);
+}
+
 /* O pin é só o SVG: sem caixa, sem fundo, sem sombra do Leaflet. */
 .station-pin {
     background: none;
@@ -138,6 +157,229 @@
     background: var(--color-stone-100);
 }
 
+/* ---- Modal de relato com foto ----
+
+   O mapa é o campo principal, não acessório: a localização é o dado que dá
+   sentido à foto, e no desktop o GPS erra quilômetros — marcar no mapa deixa de
+   ser refinamento e passa a ser o caminho normal. */
+
+.report {
+    margin: auto;
+    width: min(26rem, calc(100vw - 1.5rem));
+    max-height: calc(100dvh - 2rem);
+    border: 0;
+    border-radius: 0.75rem;
+    padding: 0;
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+    font-size: var(--fs-body);
+    line-height: 1.4;
+    color: var(--ink);
+}
+
+.report::backdrop {
+    background: rgb(12 12 12 / 0.55);
+}
+
+.report-head {
+    position: relative;
+    border-bottom: 1px solid var(--rule);
+    padding: 0.85rem 3rem 0.7rem 1rem;
+}
+
+.report-title {
+    font-size: var(--fs-title);
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+/* Vem antes de tudo: quem envia precisa saber que não é medição oficial. */
+.report-kind {
+    margin-top: var(--sp-hair);
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+.report-close {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.report-close:hover {
+    background: var(--color-stone-100);
+}
+
+.report-body {
+    max-height: calc(100dvh - 8rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 1rem 1rem;
+}
+
+/* Alvo alto: a escolha da foto é a primeira ação e precisa ser óbvia. */
+.report-file {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: var(--sp-tight);
+    border: 1px dashed var(--color-stone-400);
+    border-radius: 0.5rem;
+    padding: 0.85rem 0.75rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.report-file:hover {
+    border-color: #2a78d6;
+    color: #256abf;
+}
+
+.report-file input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+}
+
+.report-file:focus-within {
+    outline: 2px solid #2a78d6;
+    outline-offset: 2px;
+}
+
+.report-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: var(--sp-tight);
+}
+
+.report-preview img {
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 0.375rem;
+    object-fit: cover;
+}
+
+.report-link {
+    font-size: var(--fs-label);
+    color: #256abf;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.report-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    width: 100%;
+    margin-top: var(--sp-tight);
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.6rem;
+    font: inherit;
+    font-weight: 600;
+    color: inherit;
+    cursor: pointer;
+}
+
+.report-action:hover {
+    background: var(--color-stone-50);
+}
+
+.report-search {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: var(--sp-group);
+}
+
+.report-search input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.6rem;
+    font: inherit;
+}
+
+.report-search button {
+    flex: none;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.8rem;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.report-map {
+    height: 11rem;
+    margin-top: var(--sp-group);
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+}
+
+.report-position {
+    margin-top: var(--sp-tight);
+    font-size: var(--fs-label);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+}
+
+.report-consent {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-top: var(--sp-section);
+    font-size: var(--fs-label);
+    line-height: 1.35;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.report-consent input {
+    flex: none;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 0.05rem;
+}
+
+.report-status {
+    margin-top: var(--sp-group);
+    border-radius: 0.375rem;
+    background: var(--color-stone-100);
+    padding: 0.5rem 0.6rem;
+    font-size: var(--fs-label);
+    line-height: 1.4;
+}
+
+.report-submit {
+    width: 100%;
+    margin-top: var(--sp-group);
+    border-radius: 0.5rem;
+    background: var(--color-stone-900);
+    padding: 0.75rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+}
+
+/* Desabilitado enquanto faltar foto, local ou consentimento — e o motivo fica
+   escrito acima, em vez de o botão só não responder. */
+.report-submit:disabled {
+    background: var(--color-stone-300);
+    color: var(--color-stone-600);
+    cursor: not-allowed;
+}
+
 /* ---- Aviso de entrada ---- */
 
 .disclaimer {
@@ -231,21 +473,6 @@
 }
 
 .leaflet-popup-content {
-    --fs-title: 1rem;
-    --fs-value: 1.75rem;
-    --fs-body: 0.8rem;
-    --fs-label: 0.7rem;
-    --fs-eyebrow: 0.62rem;
-
-    --sp-hair: 0.15rem;
-    --sp-tight: 0.25rem;
-    --sp-group: 0.5rem;
-    --sp-section: 0.85rem;
-
-    --ink: var(--color-stone-900);
-    --ink-soft: var(--color-stone-600);
-    --rule: var(--color-stone-200);
-
     /* A largura vem do Leaflet, mas nunca além da viewport. */
     max-width: calc(100vw - 4rem);
     max-height: calc(100dvh - 9rem);
