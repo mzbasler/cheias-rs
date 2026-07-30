@@ -270,7 +270,7 @@ const map = L.map('map', {
     center: [-29.8, -53.2], // Rio Grande do Sul
     zoom: 6,
     zoomControl: false,
-    // A atribuição sai da caixa padrão e entra na legenda — exigida pela
+    // A atribuição sai da caixa padrão e entra num controle próprio — exigida pela
     // licença dos tiles, então muda de lugar, não desaparece.
     attributionControl: false,
 });
@@ -284,7 +284,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
 }).addTo(map);
 
 /**
- * Uma camada por estado, para a legenda poder ligar e desligar cada um. Numa
+ * Uma camada por estado, para o filtro poder ligar e desligar cada um. Numa
  * cheia, o que importa é isolar as estações em risco entre centenas de pins.
  */
 const layers = {};
@@ -322,76 +322,100 @@ stations.forEach((station) => {
     (layers[station.status] ??= L.layerGroup().addTo(map)).addLayer(marker);
 });
 
-/** A ordem de STATUS já vai do mais grave ao menos — a legenda a reaproveita. */
-const legend = L.control({ position: 'bottomleft' });
+/**
+ * Filtro por estado. Caixa de seleção em vez de linha de legenda: a lista serve
+ * para ligar e desligar estados, e precisa parecer o que é. A ordem de STATUS já
+ * vai do mais grave ao menos.
+ */
+const filters = L.control({ position: 'topleft' });
 
-legend.onAdd = () => {
-    const container = L.DomUtil.create('div', 'legend');
+filters.onAdd = () => {
+    const container = L.DomUtil.create('div', 'filters');
+    const present = Object.keys(STATUS).filter((key) => layers[key] !== undefined);
+    const total = present.reduce((sum, key) => sum + layers[key].getLayers().length, 0);
 
-    const rows = Object.keys(STATUS)
-        .filter((key) => layers[key] !== undefined)
+    const rows = present
         .map((key) => {
             const { label, color, shape } = STATUS[key];
 
             return `
                 <li>
-                    <button type="button" data-status="${key}" aria-pressed="true">
+                    <label>
+                        <input type="checkbox" data-status="${key}" checked>
                         <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">${SHAPES[shape].replaceAll('COLOR', color)}</svg>
                         <span>${label}</span>
                         <em>${layers[key].getLayers().length}</em>
-                    </button>
+                    </label>
                 </li>
             `;
         })
         .join('');
 
     container.innerHTML = `
-        <button type="button" class="legend-toggle" aria-expanded="false" aria-controls="legend-panel">
+        <button type="button" class="filters-toggle" aria-expanded="false" aria-controls="filters-panel">
             <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M3 5.5h18l-7 8v5.5l-4 2v-7.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
             </svg>
-            Filtros
+            <span>Filtros</span>
+            <em id="filters-count">${total}</em>
         </button>
-        <div class="legend-panel" id="legend-panel" hidden>
-            <ul class="legend-list">${rows}</ul>
+        <div class="filters-panel" id="filters-panel" hidden>
+            <ul class="filters-list">${rows}</ul>
         </div>
-        <p class="legend-credit">
-            © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
-            · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>
-        </p>
     `;
 
-    const toggle = container.querySelector('.legend-toggle');
-    const panel = container.querySelector('.legend-panel');
+    const toggle = container.querySelector('.filters-toggle');
+    const panel = container.querySelector('.filters-panel');
+    const count = container.querySelector('#filters-count');
 
     toggle.addEventListener('click', () => {
         panel.hidden = !panel.hidden;
         toggle.setAttribute('aria-expanded', String(!panel.hidden));
     });
 
-    container.querySelectorAll('button[data-status]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const layer = layers[button.dataset.status];
-            const visible = map.hasLayer(layer);
+    container.querySelectorAll('input[data-status]').forEach((box) => {
+        box.addEventListener('change', () => {
+            const layer = layers[box.dataset.status];
 
-            if (visible) {
-                map.removeLayer(layer);
-            } else {
+            if (box.checked) {
                 map.addLayer(layer);
+            } else {
+                map.removeLayer(layer);
             }
 
-            button.setAttribute('aria-pressed', String(!visible));
+            // Quantas estações estão à vista: sem isso não se sabe o que o filtro
+            // escondeu com o painel fechado.
+            count.textContent = present
+                .filter((key) => map.hasLayer(layers[key]))
+                .reduce((sum, key) => sum + layers[key].getLayers().length, 0);
         });
     });
 
-    // Sem isso, arrastar ou rolar sobre a legenda move o mapa por baixo dela.
+    // Sem isso, arrastar ou rolar sobre o painel move o mapa por baixo dele.
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
 
     return container;
 };
 
-legend.addTo(map);
+filters.addTo(map);
+
+/** Exigida pela licença dos tiles: fica no canto, discreta e sempre visível. */
+const credit = L.control({ position: 'bottomleft' });
+
+credit.onAdd = () => {
+    const container = L.DomUtil.create('div', 'map-credit');
+
+    container.innerHTML =
+        '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' +
+        ' · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>';
+
+    L.DomEvent.disableClickPropagation(container);
+
+    return container;
+};
+
+credit.addTo(map);
 
 /**
  * Telefone, não tablet. Ponteiro grosso já separa toque de mouse, mas tablet
