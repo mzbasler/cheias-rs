@@ -31,6 +31,9 @@ class ImportAnaReadings extends Command
     /** A ANA publica em hora de Brasília; o banco guarda em UTC. */
     private const TIMEZONE = 'America/Sao_Paulo';
 
+    /** Seis colunas por linha, dentro do limite de variáveis do SQLite. */
+    private const UPSERT_CHUNK = 120;
+
     public function handle(): int
     {
         $token = $this->authenticate();
@@ -104,7 +107,14 @@ class ImportAnaReadings extends Command
                 continue;
             }
 
-            $rows[] = [
+            // A ANA às vezes republica o mesmo instante duas vezes na mesma
+            // resposta (revisão de valor). No Postgres, duas linhas com a mesma
+            // chave de conflito no mesmo upsert é erro (SQLite deixava passar) —
+            // a chave aqui garante uma linha por estação+instante, ficando com a
+            // última (mais recente) publicada.
+            $key = $station->id.':'.$item['Data_Hora_Medicao'];
+
+            $rows[$key] = [
                 'station_id' => $station->id,
                 'measured_at' => CarbonImmutable::parse($item['Data_Hora_Medicao'], self::TIMEZONE)->utc(),
                 'value' => ((float) $item['Cota_Adotada']) / 100, // A ANA publica cota em centímetros.
@@ -114,8 +124,10 @@ class ImportAnaReadings extends Command
             ];
         }
 
-        if ($rows !== []) {
-            Reading::upsert($rows, ['station_id', 'measured_at'], ['value', 'source', 'updated_at']);
+        $rows = array_values($rows);
+
+        foreach (array_chunk($rows, self::UPSERT_CHUNK) as $chunk) {
+            Reading::upsert($chunk, ['station_id', 'measured_at'], ['value', 'source', 'updated_at']);
         }
 
         return count($rows);

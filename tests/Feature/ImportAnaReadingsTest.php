@@ -66,6 +66,27 @@ class ImportAnaReadingsTest extends TestCase
         $this->assertSame(1, Reading::count());
     }
 
+    /**
+     * A ANA às vezes republica o mesmo instante duas vezes na mesma resposta.
+     * No Postgres, duas linhas com a mesma chave de conflito no mesmo upsert é
+     * erro ("cardinality violation") — o comando precisa deduplicar antes.
+     */
+    public function test_it_deduplicates_repeated_entries_within_the_same_response(): void
+    {
+        $this->createStation();
+        $this->fakeAna(items: [
+            $this->item(cota: '278.00'),
+            $this->item(cota: '279.00'),
+        ]);
+
+        $this->artisan('import:ana')->assertSuccessful();
+
+        $reading = Station::sole()->latestReading;
+
+        $this->assertSame(1, Reading::count());
+        $this->assertSame(2.79, $reading->value);
+    }
+
     public function test_it_does_nothing_when_no_station_is_catalogued_by_ana(): void
     {
         $this->fakeAna(items: [$this->item()]);
