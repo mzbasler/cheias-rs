@@ -19,6 +19,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Padrão do framework manda quem já está logado de volta pro '/' ao
         // visitar /admin/login — que aqui é o mapa público, não o painel.
         $middleware->redirectUsersTo('/admin');
+
+        // O Railway termina o HTTPS na borda e repassa HTTP pro container: sem
+        // confiar no proxy, o Laravel não vê a requisição como segura e gera
+        // asset/URL com http://, que o navegador bloqueia como mixed content
+        // numa página https://. O container só é alcançável através do proxy
+        // do Railway, não há IP de borda fixo para restringir.
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
