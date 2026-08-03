@@ -12,13 +12,19 @@ use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
+ * A cota de estação catalogada pela ANA vem de import:ana (API oficial) — este
+ * comando cobre só o que a ANA não tem: as estações que o SACE mede mas que não
+ * existem no catálogo dela (código próprio do SACE, tipo "cai:108"). Ainda
+ * assim busca as três cotas de referência de qualquer estação sem elas, porque
+ * a ANA não publica esse dado.
+ *
  * O SACE não publica API: os dados vêm da própria página do mapa de níveis, que
  * traz os marcadores já renderizados, e de um CSV por estação. É raspagem, então
  * qualquer mudança de layout precisa falhar alto — em silêncio, o mapa
  * simplesmente pararia de atualizar sem ninguém notar.
  */
 #[Signature('import:sace {--metadata : Rebusca cotas de referência de todas as estações}')]
-#[Description('Importa estações e níveis medidos do SACE (SGB/CPRM)')]
+#[Description('Importa cotas de referência e níveis das estações do SACE sem correspondência na ANA')]
 class ImportSaceReadings extends Command
 {
     private const SOURCE = 'sace';
@@ -43,6 +49,7 @@ class ImportSaceReadings extends Command
     public function handle(): int
     {
         $stations = 0;
+        $orphans = 0;
         $readings = 0;
 
         foreach (self::BASINS as $basin) {
@@ -57,11 +64,19 @@ class ImportSaceReadings extends Command
 
                 $station = $this->syncStation($key, $parsed);
                 $stations++;
+
+                // Cota de estação já catalogada pela ANA vem de import:ana — aqui
+                // só completa cota de referência, nunca duplica a leitura.
+                if ($station->source !== self::SOURCE) {
+                    continue;
+                }
+
+                $orphans++;
                 $readings += $this->syncReadings($station, $parsed);
             }
         }
 
-        $this->info("{$stations} estações e {$readings} leituras importadas do SACE.");
+        $this->info("{$stations} estações vistas, {$orphans} sem correspondência na ANA, {$readings} leituras importadas do SACE.");
 
         return self::SUCCESS;
     }
@@ -136,7 +151,7 @@ class ImportSaceReadings extends Command
         ]);
 
         // As cotas de referência mudam raramente: busca só na primeira vez, para
-        // não repetir uma requisição por estação a cada ciclo de leitura.
+        // não repetir uma requisição por estação a cada ciclo.
         if ($this->option('metadata') || $station->attention_level === null) {
             $station->fill($this->fetchReferenceLevels($parsed['query']));
         }

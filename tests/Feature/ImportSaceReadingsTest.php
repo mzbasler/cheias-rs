@@ -56,10 +56,11 @@ class ImportSaceReadingsTest extends TestCase
     }
 
     /**
-     * O SACE mede as mesmas estações que o inventário da ANA catalogou. Sem casar
-     * pelo código, o mapa ganharia dois pins para o mesmo rio.
+     * A cota de estação já catalogada pela ANA vem de import:ana (API oficial)
+     * — duplicar a leitura aqui por raspagem seria a mesma estação com duas
+     * fontes de verdade concorrendo pelo mesmo instante.
      */
-    public function test_it_attaches_readings_to_the_matching_ana_station(): void
+    public function test_it_does_not_duplicate_readings_on_a_station_already_catalogued_by_ana(): void
     {
         $existing = Station::create([
             'source' => 'snirh',
@@ -76,9 +77,28 @@ class ImportSaceReadingsTest extends TestCase
         $this->artisan('import:sace')->assertSuccessful();
 
         $this->assertSame(1, Station::count());
-        $this->assertSame($existing->id, Reading::sole()->station_id);
+        $this->assertSame(0, Reading::count());
         // O nome do inventário prevalece sobre o rótulo do SACE.
         $this->assertSame('ENCANTADO', $existing->fresh()->name);
+    }
+
+    /** A ANA não publica cota de referência — isso continua vindo só do SACE. */
+    public function test_it_still_fetches_reference_levels_for_a_station_catalogued_by_ana(): void
+    {
+        Station::create([
+            'source' => 'snirh',
+            'external_id' => '86720000',
+            'name' => 'ENCANTADO',
+            'latitude' => -29.2344,
+            'longitude' => -51.8550,
+            'unit' => 'm',
+        ]);
+
+        $this->fakeSace(code: '8672000');
+
+        $this->artisan('import:sace')->assertSuccessful();
+
+        $this->assertSame(5.0, Station::sole()->attention_level);
     }
 
     public function test_it_creates_a_station_when_the_code_is_not_in_the_inventory(): void
@@ -87,7 +107,10 @@ class ImportSaceReadingsTest extends TestCase
 
         $this->artisan('import:sace')->assertSuccessful();
 
-        $this->assertSame('sace', Station::sole()->source);
+        $station = Station::sole();
+
+        $this->assertSame('sace', $station->source);
+        $this->assertSame(1, $station->readings()->count());
     }
 
     /** Estação que só mede chuva não tem CSV de cota — é ausência, não falha. */

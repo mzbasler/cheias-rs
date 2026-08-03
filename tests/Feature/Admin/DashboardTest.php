@@ -48,4 +48,27 @@ class DashboardTest extends TestCase
         $this->assertSame(1, $ingestion['sigdc']['fresh']);
         $this->assertSame(0, $ingestion['sace']['total']);
     }
+
+    /**
+     * import:ana não cria estação própria — só enriquece a que a ANA mesma já
+     * catalogou (source=snirh). Agrupar por readings.source, não
+     * stations.source, é o que faz essa estação aparecer sob "ana".
+     */
+    public function test_it_counts_ana_readings_on_a_snirh_sourced_station(): void
+    {
+        $station = Station::create([
+            'source' => 'snirh',
+            'external_id' => '86720000',
+            'name' => 'ENCANTADO',
+            'latitude' => -29.2344,
+            'longitude' => -51.8550,
+            'unit' => 'm',
+        ]);
+        $station->readings()->create(['value' => 2.78, 'measured_at' => now(), 'source' => 'ana']);
+
+        $ingestion = $this->actingAs(User::factory()->create())->get('/admin')->viewData('ingestion');
+
+        $this->assertSame(1, $ingestion['ana']['total']);
+        $this->assertSame(1, $ingestion['ana']['fresh']);
+    }
 }
