@@ -1,0 +1,461 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* Mesma régua do app.css (mapa público) — manter em sincronia se um dos dois
+   mudar. Arquivo à parte porque telas de admin são outro gênero de UI (tabela,
+   formulário), mas os tokens e o vocabulário visual (eyebrow, badge, dot,
+   cartão) são os mesmos do resto do sistema. */
+:root {
+    --fs-title: 1.15rem;
+    --fs-body: 0.8rem;
+    --fs-label: 0.7rem;
+    --fs-eyebrow: 0.62rem;
+
+    --sp-hair: 0.15rem;
+    --sp-tight: 0.25rem;
+    --sp-group: 0.5rem;
+    --sp-section: 0.85rem;
+
+    --ink: var(--color-stone-900);
+    --ink-soft: var(--color-stone-600);
+    --rule: var(--color-stone-200);
+
+    /* Mesmas quatro cores do STATUS em map.js — repetidas aqui porque o admin
+       é PHP/Blade, sem acesso ao objeto JS. Mudou lá, muda aqui também. */
+    --status-critical: #d03b3b;
+    --status-alert: #fab219;
+    --status-normal: #0ca30c;
+    --status-unknown: #8c8a85;
+}
+
+body {
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Mesmo .dot do app.css (mapa), parado — sem o pulso de risco, que ali só
+   existe no pino do mapa (.station-pin), não na lista. Repetido aqui pela
+   mesma razão dos tokens acima: arquivos de CSS independentes. */
+.dot {
+    display: inline-block;
+    width: var(--dot-size, 10px);
+    height: var(--dot-size, 10px);
+    border-radius: 50%;
+    background: var(--dot);
+}
+
+/* ---- Barra superior ---- */
+
+/* No celular, barra horizontal no topo — não sobra largura pra uma coluna
+   fixa. No desktop (media query abaixo), vira sidebar de verdade. */
+.admin-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+}
+
+.admin-sidebar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-section);
+    flex: none;
+    border-bottom: 1px solid var(--rule);
+    background: #fff;
+    padding: var(--sp-group) var(--sp-section);
+}
+
+.admin-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-tight);
+    font-weight: 600;
+}
+
+/* Mesmo ponto do mapa (estado "normal") — a marca do admin é literalmente a
+   mesma peça visual que representa uma estação medindo bem. */
+.admin-brand .dot {
+    --dot: var(--status-normal);
+    --dot-size: 9px;
+}
+
+.admin-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-section);
+    font-size: var(--fs-body);
+}
+
+.admin-nav a {
+    color: var(--ink-soft);
+}
+
+.admin-nav a:hover,
+.admin-nav a[aria-current='page'] {
+    color: var(--ink);
+}
+
+.admin-logout-form {
+    margin-left: auto;
+}
+
+.admin-logout {
+    font-size: var(--fs-body);
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.admin-logout:hover {
+    color: var(--ink);
+}
+
+/* Coluna fixa à esquerda em vez de barra: sobra largura no desktop, e uma
+   sidebar deixa os quatro itens sempre à vista, sem competir por espaço
+   horizontal com a marca e o "Sair". */
+@media (min-width: 860px) {
+    .admin-shell {
+        flex-direction: row;
+    }
+
+    .admin-sidebar {
+        flex-direction: column;
+        align-items: stretch;
+        width: 14rem;
+        height: 100dvh;
+        overflow-y: auto;
+        border-right: 1px solid var(--rule);
+        border-bottom: 0;
+        padding: var(--sp-section);
+    }
+
+    .admin-nav {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--sp-hair);
+        margin-top: var(--sp-section);
+    }
+
+    .admin-nav a {
+        border-radius: 0.5rem;
+        padding: 0.5rem var(--sp-group);
+    }
+
+    .admin-nav a:hover {
+        background: var(--color-stone-100);
+    }
+
+    .admin-nav a[aria-current='page'] {
+        background: var(--color-stone-900);
+        color: #fff;
+        font-weight: 600;
+    }
+
+    .admin-logout-form {
+        margin-top: auto;
+        margin-left: 0;
+    }
+
+    .admin-logout {
+        display: block;
+        width: 100%;
+        border-radius: 0.5rem;
+        padding: 0.5rem var(--sp-group);
+        text-align: left;
+    }
+
+    .admin-logout:hover {
+        background: var(--color-stone-100);
+    }
+}
+
+/* ---- Página ---- */
+
+/* Sem max-width/centralização: a sidebar já ocupa a coluna fixa à esquerda,
+   então o conteúdo aproveita o resto da largura em vez de sobrar vão morto
+   nas laterais. Formulário estreito é escolha do formulário (ver admin-form),
+   não do container da página. */
+.admin-main {
+    flex: 1;
+    min-width: 0;
+    padding: var(--sp-section) var(--sp-section) 3rem;
+}
+
+/* Formulário continua com largura de leitura confortável — input esticado a
+   página inteira não fica mais fácil de usar, só mais largo. */
+.admin-form {
+    max-width: 34rem;
+}
+
+.admin-title {
+    font-size: var(--fs-title);
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.admin-subtitle {
+    margin-top: var(--sp-hair);
+    font-size: var(--fs-body);
+    color: var(--ink-soft);
+}
+
+/* Mesmo padrão de .card-eyebrow/.about-eyebrow no mapa: régua em cima,
+   versalete espaçado — é como o sistema inteiro introduz uma seção. */
+.admin-eyebrow {
+    margin-top: var(--sp-section);
+    border-top: 1px solid var(--rule);
+    padding-top: var(--sp-tight);
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-stone-500);
+}
+
+.admin-eyebrow:first-child {
+    margin-top: 0;
+    border-top: 0;
+    padding-top: 0;
+}
+
+/* ---- Aviso de status da sessão (flash) ---- */
+
+.admin-flash {
+    margin-bottom: var(--sp-section);
+    border-radius: 0.5rem;
+    background: #e9f5e9;
+    padding: var(--sp-group) var(--sp-section);
+    font-size: var(--fs-body);
+    color: #1a5c1a;
+}
+
+.admin-errors {
+    margin-bottom: var(--sp-section);
+    border-radius: 0.5rem;
+    background: #fbe9e9;
+    padding: var(--sp-group) var(--sp-section);
+    font-size: var(--fs-body);
+    color: #8a2323;
+}
+
+.admin-errors li + li {
+    margin-top: var(--sp-hair);
+}
+
+/* ---- Cartão ---- */
+
+.admin-card {
+    border: 1px solid var(--rule);
+    border-radius: 0.75rem;
+    background: #fff;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
+}
+
+/* ---- Linha de lista (estação, relato) ----
+   Mesmo esqueleto do .station-open do mapa: dot + texto + ação, com hover em
+   stone-100 — é a mesma gramática de "linha que representa uma estação". */
+.admin-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-group);
+    border-bottom: 1px solid var(--rule);
+    padding: var(--sp-group) var(--sp-section);
+}
+
+.admin-row:last-child {
+    border-bottom: 0;
+}
+
+.admin-row:hover {
+    background: var(--color-stone-50);
+}
+
+.admin-row .dot {
+    flex: none;
+}
+
+.admin-row-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.admin-row-name {
+    display: block;
+    overflow: hidden;
+    font-size: var(--fs-body);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-row-place {
+    display: block;
+    overflow: hidden;
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-row-meta {
+    flex: none;
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.admin-row-action {
+    flex: none;
+    font-size: var(--fs-label);
+    font-weight: 600;
+    color: #256abf;
+}
+
+.admin-row-action:hover {
+    text-decoration: underline;
+}
+
+/* ---- Selo de estado ----
+   Mesmo desenho do .card-badge no card de estação: fundo sólido, versalete,
+   cantos de 3px — o mesmo selo, seja pra estado de rio, relato ou ingestão. */
+.admin-badge {
+    display: inline-block;
+    flex: none;
+    border-radius: 3px;
+    padding: 0.1rem 0.35rem;
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: #fff;
+}
+
+.admin-badge[data-tone='critical'] {
+    background: var(--status-critical);
+}
+
+.admin-badge[data-tone='alert'] {
+    background: var(--status-alert);
+    color: #3d2c00;
+}
+
+.admin-badge[data-tone='good'] {
+    background: var(--status-normal);
+}
+
+.admin-badge[data-tone='neutral'] {
+    background: var(--status-unknown);
+}
+
+/* ---- Formulário ---- */
+
+.admin-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-hair);
+    font-size: var(--fs-body);
+}
+
+.admin-field span {
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+.admin-input {
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.6rem;
+    font: inherit;
+    font-size: var(--fs-body);
+    color: var(--ink);
+}
+
+.admin-input:focus {
+    outline: 2px solid #2a78d6;
+    outline-offset: 1px;
+}
+
+.admin-hint {
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+/* ---- Botões ---- */
+
+.admin-button {
+    border-radius: 0.5rem;
+    padding: 0.55rem var(--sp-section);
+    font-size: var(--fs-body);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.admin-button--primary {
+    background: var(--color-stone-900);
+    color: #fff;
+}
+
+.admin-button--secondary {
+    border: 1px solid var(--color-stone-300);
+    color: var(--ink);
+}
+
+.admin-button--secondary:hover {
+    background: var(--color-stone-50);
+}
+
+/* ---- Paginação ----
+   O Laravel gera as classes do Tailwind Pagination View — só ajusta o
+   espaçamento pra bater com o resto da página. */
+.admin-pagination {
+    margin-top: var(--sp-section);
+    font-size: var(--fs-label);
+}
+
+/* ---- Foto do relato ---- */
+
+.admin-photo-trigger {
+    flex: none;
+    border-radius: 0.5rem;
+    cursor: zoom-in;
+}
+
+.admin-photo-trigger img {
+    display: block;
+    border-radius: 0.5rem;
+    object-fit: cover;
+}
+
+.admin-photo-trigger:hover img {
+    opacity: 0.85;
+}
+
+/* Mesmo padrão de <dialog> centralizado do mapa público (.donate/.about):
+   fundo escurecido, cartão com sombra — só que sem cartão nenhum, a própria
+   foto em tamanho grande é o conteúdo. */
+.admin-photo-viewer {
+    margin: auto;
+    max-width: min(90vw, 40rem);
+    max-height: 90dvh;
+    border: 0;
+    border-radius: 0.75rem;
+    padding: 0;
+    background: transparent;
+}
+
+.admin-photo-viewer::backdrop {
+    background: rgb(12 12 12 / 0.7);
+}
+
+.admin-photo-viewer img {
+    display: block;
+    max-width: min(90vw, 40rem);
+    max-height: 90dvh;
+    border-radius: 0.75rem;
+}

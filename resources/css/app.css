@@ -1,0 +1,1477 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* Escala fechada: cinco tamanhos de fonte e quatro de espaçamento, e nada fora
+   deles. Vive no :root porque o card e a modal de foto usam a mesma régua. */
+:root {
+    --fs-title: 1rem;
+    --fs-value: 1.75rem;
+    --fs-body: 0.8rem;
+    --fs-label: 0.7rem;
+    --fs-eyebrow: 0.62rem;
+
+    --sp-hair: 0.15rem;
+    --sp-tight: 0.25rem;
+    --sp-group: 0.5rem;
+    --sp-section: 0.85rem;
+
+    --ink: var(--color-stone-900);
+    --ink-soft: var(--color-stone-600);
+    --rule: var(--color-stone-200);
+}
+
+/* ---- Layout do mapa ---- */
+
+.map-layout {
+    display: flex;
+    height: 100dvh;
+}
+
+#map {
+    flex: 1;
+    min-width: 0;
+}
+
+/* No celular, o card cobre a tela inteira deslizando da direita — não tem como
+   "empurrar" o mapa numa tela que já é só a largura do card. No desktop (media
+   query abaixo) volta a empurrar o mapa, com largura fixa. */
+.station-sidebar {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    width: 100vw;
+    height: 100dvh;
+    background: #fff;
+    box-shadow: 0 -2px 16px rgb(0 0 0 / 0.12);
+    transform: translateX(100%);
+    transition: transform 0.25s ease-out;
+}
+
+.station-sidebar[data-open='true'] {
+    transform: translateX(0);
+}
+
+.station-sidebar-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: max(1.25rem, calc(env(safe-area-inset-top) + 0.6rem)) 1.25rem 1.25rem;
+}
+
+@media (min-width: 860px) {
+    /* Empurra o mapa em vez de flutuar por cima — sobra tela para os dois.
+       width:0 e overflow:hidden fecham; a largura fixa por dentro garante que
+       o card nunca aparece espremido a meio caminho da transição. */
+    .station-sidebar {
+        position: static;
+        inset: auto;
+        z-index: auto;
+        width: 0;
+        height: auto;
+        flex: none;
+        overflow: hidden;
+        border-left: 1px solid var(--rule);
+        box-shadow: -4px 0 16px rgb(0 0 0 / 0.12);
+        transform: none;
+        transition: width 0.25s ease-out;
+    }
+
+    .station-sidebar[data-open='true'] {
+        width: 24rem;
+    }
+
+    .station-sidebar-inner {
+        width: 24rem;
+    }
+}
+
+/* O pin é só o ponto, centrado na área de toque: sem caixa, sem fundo, sem
+   sombra do Leaflet. */
+.station-pin {
+    display: grid;
+    place-items: center;
+    background: none;
+    border: 0;
+}
+
+/* Um ponto, quatro cores. São 238 estações no mapa: qualquer desenho maior que
+   isto vira mancha antes de virar informação. */
+.dot {
+    position: relative;
+    display: block;
+    width: var(--dot-size);
+    height: var(--dot-size);
+    border-radius: 50%;
+    background: var(--dot);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+/* Quadrado, não círculo: relato de morador precisa ser distinguível do pin de
+   estação mesmo sem cor (daltonismo, impressão P&B) — a forma já diferencia,
+   antes mesmo da cor roxa entrar. */
+.report-marker {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    background: #7c3aed;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+.report-popup {
+    max-width: 220px;
+}
+
+.report-popup-kind {
+    margin-bottom: var(--sp-tight);
+    font-size: var(--fs-label);
+    font-weight: 600;
+    color: #7c3aed;
+}
+
+.report-popup-photo {
+    display: block;
+    width: 100%;
+    border-radius: 0.375rem;
+}
+
+.report-popup-date {
+    margin-top: var(--sp-tight);
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+/* Só os dois estados de risco pulsam. O movimento é o segundo canal do aviso:
+   a diferença de cor some no sol forte e no daltonismo, a de movimento não. */
+.station-pin--critical .dot::after,
+.station-pin--alert .dot::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--dot);
+    animation: dot-pulse 2s ease-out infinite;
+}
+
+@keyframes dot-pulse {
+    from {
+        opacity: 0.55;
+        transform: scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(3.4);
+    }
+}
+
+/* Sem o pulso, o disco fica parado do mesmo tamanho: some. */
+@media (prefers-reduced-motion: reduce) {
+    .station-pin--critical .dot::after,
+    .station-pin--alert .dot::after {
+        animation: none;
+    }
+}
+
+/* Estação de leitura velha ou sem cota recua: quem está em risco precisa achar
+   o ponto que mede o rio dele, não o que não tem o que dizer. */
+.station-pin--unknown {
+    opacity: 0.55;
+}
+
+.station-pin--unknown:hover,
+.station-pin--unknown:focus {
+    opacity: 1;
+}
+
+/* ---- Dock ---- */
+
+.tools {
+    width: max-content;
+    max-width: calc(100vw - 1.5rem);
+    font-size: var(--fs-label);
+    line-height: 1.3;
+    color: var(--color-stone-700);
+}
+
+/* Uma barra só para os seis controles: estações, estilo do mapa, se localizar,
+   relatar, entender e apoiar. Espalhados por dois cantos, o polegar atravessava
+   a tela. */
+.dock {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    width: max-content;
+    border-radius: 999px;
+    background: #fff;
+    padding: 0.25rem;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.28);
+}
+
+/* 44 px é o alvo de toque mínimo confortável — o app é usado com uma mão, com
+   pressa, e às vezes com a tela molhada. */
+.dock button {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    color: var(--color-stone-800);
+    cursor: pointer;
+}
+
+.dock button:hover {
+    background: var(--color-stone-100);
+}
+
+.dock button:active {
+    background: var(--color-stone-200);
+}
+
+/* Escolha única entre poucas opções — painel pequeno pendurado no dock, não
+   modal: ver o mapa por trás ajuda a decidir o estilo. */
+.basemap-panel {
+    min-width: 15rem;
+    margin-top: var(--sp-group);
+    border-radius: 0.75rem;
+    background: #fff;
+    padding: var(--sp-tight);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.28);
+}
+
+.basemap-panel-title {
+    padding: var(--sp-group) var(--sp-section) var(--sp-tight);
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-stone-500);
+}
+
+.basemap-list {
+    list-style: none;
+}
+
+/* A miniatura é o ladrilho real da fonte — mostra a paleta do estilo, não só
+   o nome. */
+.basemap-item {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr auto;
+    align-items: center;
+    gap: var(--sp-group);
+    width: 100%;
+    min-height: 2.5rem;
+    border-radius: 0.5rem;
+    padding: var(--sp-hair) var(--sp-group);
+    font: inherit;
+    font-size: var(--fs-body);
+    font-weight: 600;
+    text-align: left;
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.basemap-item:hover {
+    background: var(--color-stone-100);
+}
+
+.basemap-preview {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.375rem;
+    object-fit: cover;
+    background: var(--color-stone-100);
+}
+
+.basemap-check {
+    flex: none;
+    color: var(--color-stone-800);
+    opacity: 0;
+}
+
+.basemap-item[aria-pressed='true'] .basemap-check {
+    opacity: 1;
+}
+
+/* ---- Filtros ---- */
+
+.filters-toggle {
+    position: relative;
+}
+
+/* Contagem do que está à vista: com o painel fechado, é o que diz se algo foi
+   escondido. */
+.filters-toggle em {
+    position: absolute;
+    top: 0;
+    right: 0;
+    border-radius: 999px;
+    background: var(--color-stone-800);
+    padding: 0.05rem 0.35rem;
+    font-size: var(--fs-eyebrow);
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+}
+
+/* ---- Modal de estações ----
+
+   No celular, tela cheia: é o painel de controle das 55 estações, precisa do
+   espaço inteiro numa tela pequena. No desktop (media query abaixo) volta a
+   ser um cartão centralizado, como os demais modais — sobra tela ao redor.
+   Reaproveita .report-head/.report-title/.report-close do Blade. */
+.stations {
+    margin: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    color: var(--ink);
+}
+
+/* display:flex precisa valer só com o dialog aberto — sem o [open], a regra
+   vence o "display:none" nativo do <dialog> fechado, e ele fica invisível mas
+   ainda no layout, roubando o scroll/zoom do mapa por baixo. Foi exatamente
+   esse o bug: fechar a modal "travava" o mapa. */
+.stations[open] {
+    display: flex;
+    flex-direction: column;
+}
+
+.stations::backdrop {
+    background: rgb(12 12 12 / 0.55);
+}
+
+/* Busca e chips ficam fora da rolagem — filtrar não deve exigir voltar ao
+   topo. */
+.stations-toolbar {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--sp-group);
+    border-bottom: 1px solid var(--rule);
+    padding: var(--sp-group) var(--sp-section);
+}
+
+.stations-search {
+    width: 100%;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.65rem;
+    font: inherit;
+    font-size: var(--fs-body);
+}
+
+.stations-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-tight);
+}
+
+/* Filtro de visualização — o que a busca e os chips escondem some só desta
+   lista, nunca do mapa. Visibilidade no mapa é o olho, em cada linha. */
+.chip {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 999px;
+    padding: 0.25rem 0.6rem;
+    font-size: var(--fs-label);
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.chip[aria-pressed='true'] {
+    border-color: var(--color-stone-800);
+    background: var(--color-stone-800);
+    color: #fff;
+}
+
+.chip em {
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.75;
+}
+
+/* flex:1 com min-height:0 é o que deixa só esta região rolar, mantendo o
+   cabeçalho e a barra de busca fixos — sem isso um flex item não encolhe
+   abaixo do conteúdo. */
+.stations-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--sp-tight);
+}
+
+.station-list,
+.station-group-rows {
+    list-style: none;
+}
+
+/* Um grupo por estado, do mais grave ao menos — a ordem da lista é a escala de
+   risco. Sem seta, sem recolher: busca e chips já filtram o que pesa. */
+.station-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-group);
+    padding: var(--sp-tight) var(--sp-group) var(--sp-hair);
+}
+
+.station-group-title {
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-stone-500);
+}
+
+.station-group-title em {
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Oculta a categoria inteira no mapa de uma vez — o olho é o mesmo desenho da
+   linha individual, só menor, porque aqui o alcance é maior. */
+.station-group-toggle {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.station-group-toggle:hover {
+    background: var(--color-stone-100);
+}
+
+.station-group-toggle[aria-pressed='false'] {
+    color: var(--color-stone-300);
+}
+
+.station-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-hair);
+}
+
+/* O botão principal abre a estação no mapa: fecha o modal, centraliza e mostra
+   o card — é o mesmo card que abrir o pin direto, só que achado pelo nome. */
+.station-open {
+    display: grid;
+    grid-template-columns: 1.25rem 1fr auto;
+    align-items: center;
+    gap: var(--sp-group);
+    flex: 1;
+    min-width: 0;
+    border-radius: 0.5rem;
+    padding: var(--sp-tight) var(--sp-group);
+    font: inherit;
+    text-align: left;
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.station-open:hover {
+    background: var(--color-stone-100);
+}
+
+.station-open .dot {
+    justify-self: center;
+}
+
+.station-text {
+    display: block;
+    min-width: 0;
+}
+
+.station-name,
+.station-place {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.station-name {
+    font-size: var(--fs-body);
+    font-weight: 600;
+}
+
+.station-place {
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+.station-reading {
+    display: grid;
+    justify-items: end;
+    gap: 0.05rem;
+    white-space: nowrap;
+}
+
+.station-reading strong {
+    font-size: var(--fs-body);
+    font-variant-numeric: tabular-nums;
+    color: var(--status);
+}
+
+/* Separado do botão que abre: um leva ao mapa, o outro só liga/desliga a
+   estação nele — ações diferentes, controles diferentes. */
+.station-eye {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.station-eye:hover {
+    background: var(--color-stone-100);
+}
+
+.station-eye[aria-pressed='false'] {
+    color: var(--color-stone-300);
+}
+
+/* Desligada do mapa: o nome recua, mas o dado segue legível — é o que diz o
+   que ela media antes de ser escondida. */
+.station-row[data-visible='false'] .station-name {
+    color: var(--color-stone-400);
+    text-decoration: line-through;
+}
+
+.station-row[data-visible='false'] .dot {
+    opacity: 0.3;
+}
+
+/* No desktop sobra tela: volta a ser cartão centralizado, mais largo que alto,
+   em vez da tela cheia do celular — e a lista de cada grupo abre em duas
+   colunas, menos rolagem para as mesmas 55 estações. O cabeçalho do grupo fica
+   fora da grade, então segue ocupando a largura inteira das duas colunas. */
+@media (min-width: 860px) {
+    .stations {
+        margin: auto;
+        width: min(50rem, calc(100vw - 4rem));
+        max-width: none;
+        height: auto;
+        max-height: min(36rem, calc(100dvh - 4rem));
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+    }
+
+    .station-group-rows {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 var(--sp-group);
+    }
+}
+
+/* ---- Modal de doação ----
+
+   Mesma caixa do relato (.report-head/.report-title/.report-close, cabeçalho
+   fixo e corpo rolando por dentro) — conteúdo curto, mas o teclado do celular
+   não pode empurrar o botão de copiar para fora da tela. */
+.donate {
+    margin: auto;
+    width: min(22rem, calc(100vw - 1.5rem));
+    max-height: calc(100dvh - 2rem);
+    border: 0;
+    border-radius: 0.75rem;
+    padding: 0;
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+    color: var(--ink);
+}
+
+.donate::backdrop {
+    background: rgb(12 12 12 / 0.55);
+}
+
+.donate-body {
+    max-height: calc(100dvh - 8rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 1rem 1rem;
+}
+
+.donate-amounts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-tight);
+    margin-top: var(--sp-group);
+}
+
+.donate-custom {
+    display: block;
+    margin-top: var(--sp-group);
+}
+
+.donate-custom span {
+    display: block;
+    margin-bottom: var(--sp-hair);
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+.donate-custom input {
+    width: 100%;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.6rem;
+    font: inherit;
+    font-size: var(--fs-body);
+}
+
+/* Fundo branco fixo: o QR precisa de contraste com a página por trás,
+   independente do tema. */
+.donate-qr {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--sp-section);
+}
+
+.donate-qr svg {
+    width: 100%;
+    max-width: 13rem;
+    height: auto;
+    border-radius: 0.5rem;
+    background: #fff;
+}
+
+/* ---- Legenda ---- */
+
+.legend {
+    display: grid;
+    gap: 0.5rem;
+    border-radius: 0.65rem;
+    background: rgb(255 255 255 / 0.92);
+    padding: 0.75rem 0.9rem;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+    font-size: var(--fs-body);
+    line-height: 1.2;
+    list-style: none;
+    color: var(--color-stone-700);
+}
+
+.legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+/* ---- Modal de relato com foto ----
+
+   O mapa é o campo principal, não acessório: a localização é o dado que dá
+   sentido à foto, e no desktop o GPS erra quilômetros — marcar no mapa deixa de
+   ser refinamento e passa a ser o caminho normal. */
+
+/* No celular, tela cheia — o mapa de marcação e a foto pedem espaço, não um
+   cartão espremido. No desktop (media query abaixo) volta a ser centralizado. */
+.report {
+    margin: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    font-size: var(--fs-body);
+    line-height: 1.4;
+    color: var(--ink);
+}
+
+/* display:flex só com o dialog aberto — mesma razão do .stations[open]: sem
+   o [open], a regra vence o display:none nativo do fechado e ele fica
+   invisível travando o mapa por baixo. */
+.report[open] {
+    display: flex;
+    flex-direction: column;
+}
+
+.report::backdrop {
+    background: rgb(12 12 12 / 0.55);
+}
+
+@media (min-width: 860px) {
+    .report {
+        margin: auto;
+        width: min(26rem, calc(100vw - 1.5rem));
+        max-width: none;
+        height: auto;
+        max-height: calc(100dvh - 2rem);
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+    }
+}
+
+/* Em tela cheia no celular, o topo do dialog encosta na borda real do
+   aparelho — env(safe-area-inset-top) empurra o título para fora do
+   entalhe/ilha da câmera. max() mantém a mesma folga de antes onde não há
+   entalhe (o env() vale 0). */
+.report-head {
+    position: relative;
+    border-bottom: 1px solid var(--rule);
+    padding: max(1.1rem, calc(env(safe-area-inset-top) + 0.6rem)) 3rem 0.7rem 1rem;
+}
+
+.report-title {
+    font-size: var(--fs-title);
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+/* Mesmo ícone do botão que abre esta modal — a modal precisa parecer o que
+   a abriu. */
+.stations-title {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-tight);
+}
+
+/* Vem antes de tudo: quem envia precisa saber que não é medição oficial. */
+.report-kind {
+    margin-top: var(--sp-hair);
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+.report-close {
+    position: absolute;
+    top: max(0.45rem, env(safe-area-inset-top));
+    right: max(0.45rem, env(safe-area-inset-right));
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.report-close:hover {
+    background: var(--color-stone-100);
+}
+
+/* Depois de .report-close no arquivo: precisa vencer o top/right dele, não só
+   herdar. */
+.station-sidebar-close {
+    top: max(0.75rem, env(safe-area-inset-top));
+    right: max(0.75rem, env(safe-area-inset-right));
+    z-index: 1;
+}
+
+/* O card foi desenhado para a bolha do Leaflet, que tem sua própria área para
+   o X — aqui o X é nosso, flutuando por cima do conteúdo. Sem essa folga, o
+   nome comprido ou o selo de estado passam por baixo do botão. */
+#station-sidebar-body .card-head {
+    padding-right: 2.25rem;
+}
+
+/* flex:1 com min-height:0 é o que deixa só esta região rolar, mantendo o
+   cabeçalho fixo — sem isso um flex item não encolhe abaixo do conteúdo. Ser
+   flex-column por dentro é o que deixa o botão de enviar grudar no fim do
+   espaço (via margin-top:auto nele), em vez de sobrar branco embaixo quando o
+   formulário é curto para a tela cheia do celular. */
+.report-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 1rem 1rem;
+}
+
+/* Alvo alto: a escolha da foto é a primeira ação e precisa ser óbvia. */
+.report-file {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: var(--sp-tight);
+    border: 1px dashed var(--color-stone-400);
+    border-radius: 0.5rem;
+    padding: 0.85rem 0.75rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.report-file:hover {
+    border-color: #2a78d6;
+    color: #256abf;
+}
+
+.report-file input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+}
+
+.report-file:focus-within {
+    outline: 2px solid #2a78d6;
+    outline-offset: 2px;
+}
+
+.report-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: var(--sp-tight);
+}
+
+.report-preview img {
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 0.375rem;
+    object-fit: cover;
+}
+
+.report-link {
+    font-size: var(--fs-label);
+    color: #256abf;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.report-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    width: 100%;
+    margin-top: var(--sp-tight);
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.6rem;
+    font: inherit;
+    font-weight: 600;
+    color: inherit;
+    cursor: pointer;
+}
+
+.report-action:hover {
+    background: var(--color-stone-50);
+}
+
+.report-search {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: var(--sp-group);
+}
+
+.report-search input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.6rem;
+    font: inherit;
+}
+
+.report-search button {
+    flex: none;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.8rem;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* flex:1 em vez de altura fixa: é o elemento com mais a ganhar do espaço
+   sobrando em tela cheia — mapa maior é ponto mais fácil de acertar. 11rem
+   vira só o mínimo, para não espremer demais quando o formulário é alto. */
+.report-map {
+    flex: 1;
+    min-height: 11rem;
+    margin-top: var(--sp-group);
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+}
+
+.report-position {
+    margin-top: var(--sp-tight);
+    font-size: var(--fs-label);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+}
+
+.report-consent {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-top: var(--sp-section);
+    font-size: var(--fs-label);
+    line-height: 1.35;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.report-consent input {
+    flex: none;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 0.05rem;
+}
+
+.report-status {
+    margin-top: var(--sp-group);
+    border-radius: 0.375rem;
+    background: var(--color-stone-100);
+    padding: 0.5rem 0.6rem;
+    font-size: var(--fs-label);
+    line-height: 1.4;
+}
+
+/* margin-top:auto consome todo o espaço livre acima — é o que gruda o botão
+   no fim da tela quando o formulário é curto, em vez de deixar branco embaixo. */
+.report-submit {
+    width: 100%;
+    flex: none;
+    margin-top: auto;
+    border-radius: 0.5rem;
+    background: var(--color-stone-900);
+    padding: 0.75rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+}
+
+/* Desabilitado enquanto faltar foto, local ou consentimento — e o motivo fica
+   escrito acima, em vez de o botão só não responder. */
+.report-submit:disabled {
+    background: var(--color-stone-300);
+    color: var(--color-stone-600);
+    cursor: not-allowed;
+}
+
+/* ---- Aviso de entrada ---- */
+
+/* Mesma caixa para o aviso de entrada e o "sobre os dados". Rola por dentro em
+   vez de estourar a tela e esconder o botão que fecha. */
+.disclaimer,
+.about {
+    margin: auto;
+    max-height: calc(100dvh - 2rem);
+    width: min(24rem, calc(100vw - 2rem));
+    overflow-y: auto;
+    border: 0;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+}
+
+.disclaimer::backdrop,
+.about::backdrop {
+    background: rgb(12 12 12 / 0.55);
+}
+
+.disclaimer-head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+}
+
+.disclaimer-icon {
+    flex: none;
+}
+
+.disclaimer-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.disclaimer-text {
+    margin-top: 0.6rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--color-stone-700);
+}
+
+.disclaimer-phones {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.875rem;
+    list-style: none;
+}
+
+.disclaimer-phones li {
+    flex: 1;
+}
+
+/* Alvo de toque generoso: quem usa isto pode estar com pressa e uma mão só. */
+.disclaimer-phones a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.25rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+.disclaimer-phones span {
+    font-size: 0.7rem;
+    color: var(--color-stone-600);
+}
+
+.disclaimer-phones strong {
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.disclaimer-button {
+    width: 100%;
+    margin-top: 1rem;
+    border-radius: 0.5rem;
+    background: var(--color-stone-900);
+    padding: 0.7rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+}
+
+/* ---- Sobre os dados ---- */
+
+.about-head {
+    position: relative;
+    padding-right: 2.5rem;
+}
+
+.about-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.about-head .report-close {
+    top: -0.35rem;
+    right: -0.35rem;
+}
+
+.about-eyebrow {
+    margin-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 0.5rem;
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-stone-500);
+}
+
+.about-text {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: var(--color-stone-700);
+}
+
+.about-text strong {
+    font-weight: 600;
+    color: var(--color-stone-900);
+}
+
+/* A contagem de cada fonte abre a linha: é ela que dá, de relance, a proporção
+   entre o que está catalogado e o que está medindo. */
+.about-sources {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    list-style: none;
+}
+
+.about-sources li {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr;
+    gap: 0.6rem;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--color-stone-600);
+}
+
+.about-sources strong {
+    font-size: 1rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--color-stone-900);
+}
+
+.about-sources b {
+    font-weight: 600;
+    color: var(--color-stone-800);
+}
+
+/* ---- Card da estação ----
+
+   Escala fechada: cinco tamanhos de fonte e três de espaçamento, e nada fora
+   deles. Os ajustes soltos anteriores é que produziam o ritmo irregular.
+
+   O medidor é o elemento central: um corte vertical do rio, com a régua de
+   cotas à esquerda e a água subindo do leito. Ele responde à pergunta única do
+   card — a que distância o rio está de invadir. Tudo em volta fica quieto. */
+
+/* Responsivo pela viewport, não por medida fixa: no celular encolhe até a largura
+   disponível e rola por dentro quando o conteúdo passa da altura da tela.
+   `max-width` e não `width`, para o Leaflet ainda medir o elemento e conseguir
+   centralizá-lo sobre o pin. */
+.leaflet-popup-content-wrapper {
+    max-width: calc(100vw - 2.5rem);
+}
+
+.leaflet-popup-content {
+    /* A largura vem do Leaflet, mas nunca além da viewport. */
+    max-width: calc(100vw - 4rem);
+    max-height: calc(100dvh - 9rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 0.7rem 0.8rem;
+    font-size: var(--fs-body);
+    line-height: 1.4;
+    color: var(--ink);
+}
+
+/* Espaço para o polegar não fechar o card sem querer ao rolar. */
+.leaflet-popup-close-button {
+    width: 1.75rem !important;
+    height: 1.75rem !important;
+    font-size: 1.15rem !important;
+    line-height: 1.6 !important;
+}
+
+/* ---- Cabeçalho ---- */
+
+/* Nome e estado na mesma linha: o estado é um selo, não um terceiro parágrafo.
+   Isso tira uma linha inteira do topo. */
+.card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-group);
+}
+
+.card-name {
+    font-size: var(--fs-title);
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.card-badge {
+    flex: none;
+    border-radius: 3px;
+    background: var(--status);
+    padding: 0.1rem 0.35rem;
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: #fff;
+}
+
+/* Amarelo com texto branco reprova em contraste; nesse estado a tinta escura. */
+.card-badge[data-status='alert'] {
+    color: #3d2c00;
+}
+
+.card-place {
+    margin-top: var(--sp-hair);
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+/* ---- Medidor ---- */
+
+.gauge {
+    display: grid;
+    grid-template-columns: 2.1rem 1fr;
+    gap: 0.4rem;
+    margin-top: var(--sp-section);
+}
+
+/* Régua lateral com marca em cada valor, não só nos extremos. */
+.gauge-ruler {
+    position: relative;
+    font-size: var(--fs-label);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+}
+
+.gauge-ruler i {
+    position: absolute;
+    right: 0.3rem;
+    transform: translateY(50%);
+    font-style: normal;
+    white-space: nowrap;
+}
+
+.gauge-ruler i::after {
+    content: '';
+    position: absolute;
+    right: -0.3rem;
+    top: 50%;
+    width: 0.25rem;
+    border-top: 1px solid #c3c2b7;
+}
+
+.tank {
+    position: relative;
+    height: 9.5rem;
+    overflow: hidden;
+    border: 1px solid #c3c2b7;
+    border-radius: 3px;
+}
+
+.band {
+    position: absolute;
+    left: 0;
+    right: 0;
+}
+
+.band[data-zone='normal'] {
+    background: #dfeaf6;
+}
+
+.band[data-zone='alert'] {
+    background: #fcf0d7;
+}
+
+.band[data-zone='critical'] {
+    background: #f6e3e2;
+}
+
+.water {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #2a78d6;
+    border-top: 2px solid #256abf;
+}
+
+/* Hachura em vez de água: ausência de leitura não se representa com nível zero. */
+.tank-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background:
+        repeating-linear-gradient(-45deg, rgb(137 135 129 / 0.22) 0 1px, transparent 1px 9px),
+        rgb(252 252 251 / 0.72);
+    font-size: var(--fs-label);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+
+/* Linha de cota com halo de superfície: sobre a água azul, vermelho mede
+   1,09:1 de contraste e desapareceria. */
+.limit {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    border-top: 2px solid #b8860b;
+    box-shadow:
+        0 -1px 0 #fcfcfb,
+        0 1px 0 #fcfcfb;
+    pointer-events: none;
+}
+
+.limit[data-kind='critical'] {
+    border-top-color: #c62828;
+}
+
+/* Selo montado sobre a linha, não acima dela: assim se lê como marca do nível,
+   e não como legenda solta. */
+.limit b {
+    position: absolute;
+    right: 0.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 1px solid currentcolor;
+    border-radius: 3px;
+    background: #fff;
+    padding: 0.05rem 0.3rem;
+    font-size: var(--fs-label);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    color: #8a5a00;
+}
+
+.limit[data-kind='critical'] b {
+    color: #a02020;
+}
+
+/* ---- Leitura ---- */
+
+/* Valor, variação e horário numa linha, alinhados pela base. O horário não é
+   empurrado para o canto: fica ao lado, na mesma escala das outras marcações. */
+.card-reading {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-group);
+    flex-wrap: wrap;
+    margin-top: var(--sp-group);
+}
+
+.card-value {
+    font-size: var(--fs-value);
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.card-value span {
+    margin-left: 0.1rem;
+    font-size: var(--fs-label);
+    font-weight: 500;
+    color: var(--ink-soft);
+}
+
+.card-trend {
+    border: 1px solid var(--color-stone-300);
+    border-radius: 3px;
+    padding: 0.05rem 0.3rem;
+    font-size: var(--fs-label);
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--ink-soft);
+}
+
+.card-trend[data-rising='true'] {
+    border-color: #b8860b;
+    background: #fcf0d7;
+    color: #3d2c00;
+}
+
+.card-time {
+    font-size: var(--fs-label);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+}
+
+.card-stale {
+    margin-top: var(--sp-tight);
+    border-left: 2px solid #b8860b;
+    padding-left: 0.4rem;
+    font-size: var(--fs-label);
+    color: #7c4a03;
+}
+
+/* A distância até a cota é a resposta que o card existe para dar. */
+.card-gap {
+    margin-top: var(--sp-group);
+    border-radius: 3px;
+    background: var(--color-stone-100);
+    padding: 0.4rem 0.5rem;
+    font-size: var(--fs-body);
+}
+
+.card-gap strong {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.card-gap[data-level='alert'] {
+    background: #fcf0d7;
+}
+
+.card-gap[data-level='critical'] {
+    background: #f6e3e2;
+    color: #7f1d1d;
+}
+
+/* ---- Seções ---- */
+
+.card-eyebrow {
+    margin-top: var(--sp-section);
+    border-top: 1px solid var(--rule);
+    padding-top: var(--sp-tight);
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+
+/* ---- Gráfico de 24 h ---- */
+
+.card-chart {
+    display: block;
+    width: 100%;
+    height: 5rem;
+    margin-top: var(--sp-tight);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--color-stone-50);
+}
+
+.card-chart polyline {
+    fill: none;
+    stroke: #2a78d6;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+}
+
+.card-axis {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-group);
+    margin-top: var(--sp-hair);
+    font-size: var(--fs-label);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+}
+
+.card-note {
+    margin-top: var(--sp-hair);
+    font-size: var(--fs-label);
+    line-height: 1.35;
+    color: var(--ink-soft);
+}
+
+.card-source {
+    margin-top: var(--sp-group);
+    border-top: 1px solid var(--rule);
+    padding-top: var(--sp-tight);
+    font-size: var(--fs-label);
+    color: var(--color-stone-500);
+}
