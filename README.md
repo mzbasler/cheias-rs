@@ -25,20 +25,23 @@ calmo.
 
 ## Fontes de dados
 
-Retrato do banco em 2 de agosto de 2026 — 280 estações:
+Retrato do banco em 3 de agosto de 2026 — 273 estações:
 
 | Fonte | Estações | Papel |
 | --- | ---: | --- |
-| SNIRH / Hidroweb (ANA) | 238 | Inventário: catálogo das estações de rio, telemétricas e em operação no RS. Entra como localização e nome, sem leitura. |
-| SACE (SGB, antigo CPRM) | 38 | Sistema de Alerta de Eventos Críticos. De onde vem a maior parte das leituras e das cotas de referência. Não publica API: é raspagem da página do mapa de níveis e de um CSV por estação. |
+| SNIRH / Hidroweb (ANA) | 238 | Inventário (`import:snirh`): catálogo das estações de rio, telemétricas e em operação no RS. Entra como localização e nome, sem leitura. |
+| ANA — Hidroweb Service (`import:ana`) | — | Leitura oficial (`import:ana`): API autenticada da própria ANA, mede a cota das estações que ela já catalogou. Substitui a raspagem do SACE para quem tem código no inventário. |
+| SACE (SGB, antigo CPRM) | 31 | Cobre só quem a ANA não cataloga (código próprio do SACE, sem correspondência no inventário) — e continua sendo a única fonte das cotas de referência (atenção/alerta/inundação), que a API da ANA não publica. Não tem API própria: é raspagem da página do mapa de níveis e de um CSV por estação. |
 | SIGDC (Defesa Civil RS) | 4 | Pontos de monitoramento com leitura. |
 
-Só as estações com leitura registrada vão ao mapa — 55 na data acima. As demais ficam de
-fora: estação catalogada sem medição viraria ruído sobre as que informam.
+Só as estações com leitura registrada vão ao mapa — a maioria das 238 do inventário, mais
+as 31 do SACE e as 4 do SIGDC. As demais ficam de fora: estação catalogada sem medição
+viraria ruído sobre as que informam.
 
-O SACE mede as mesmas estações que o inventário da ANA já catalogou; quando o código
-coincide, a leitura entra na estação existente em vez de criar uma duplicata a poucos
-metros dela no mapa.
+`import:ana` e o SACE medem, em parte, as mesmas estações que o inventário da ANA já
+catalogou; quando o código coincide, a leitura entra na estação existente em vez de criar
+uma duplicata a poucos metros dela no mapa — por isso a raspagem do SACE hoje só processa
+quem não tem esse código.
 
 ## Stack
 

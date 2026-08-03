@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    // Hidroweb Service da ANA — cadastro pessoal, ver import:ana.
+    'ana' => [
+        'identificador' => env('ANA_HIDRO_IDENTIFICADOR'),
+        'senha' => env('ANA_HIDRO_SENHA'),
+    ],
+
 ];

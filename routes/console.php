@@ -6,7 +6,12 @@ use Illuminate\Support\Facades\Schedule;
 // rio sem martelar a Defesa Civil.
 Schedule::command('import:sigdc')->everyFifteenMinutes()->withoutOverlapping();
 
-// O SACE publica a cada 15 min, mas são ~90 requisições por ciclo: meia hora
+// A ANA publica a cota a cada 15 min — mesma cadência do SIGDC, API oficial
+// autenticada em vez da raspagem que o SACE exigia.
+Schedule::command('import:ana')->everyFifteenMinutes()->withoutOverlapping();
+
+// import:sace agora só cobre as ~31 estações sem correspondência no catálogo
+// da ANA — bem menos que as ~90 de antes, mas ainda é raspagem: meia hora
 // mantém o mapa atual sem martelar o servidor do SGB.
 Schedule::command('import:sace')->everyThirtyMinutes()->withoutOverlapping();
 
