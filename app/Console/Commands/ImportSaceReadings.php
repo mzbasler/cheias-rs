@@ -222,7 +222,10 @@ class ImportSaceReadings extends Command
                 continue;
             }
 
-            $rows[] = [
+            // Linha repetida no CSV é a mesma chave de conflito duas vezes no
+            // mesmo upsert — Postgres rejeita (SQLite deixava passar); fica com
+            // a última.
+            $rows[$measuredAt] = [
                 'station_id' => $station->id,
                 // `upsert` não passa pelos casts do model: a conversão para UTC
                 // tem de ser explícita, senão o horário entra com o fuso embutido.
@@ -233,6 +236,8 @@ class ImportSaceReadings extends Command
                 'updated_at' => $now,
             ];
         }
+
+        $rows = array_values($rows);
 
         // Cada CSV traz ~21 dias a cada 15 min. Gravar linha por linha custava duas
         // mil consultas por estação; em lote são poucas.
