@@ -1,22 +1,25 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import qrcode from 'qrcode-generator';
 
 /**
- * Cada estado tem cor, forma e texto próprios. A cor nunca decide sozinha:
- * em daltonismo, sob sol forte ou em impressão P&B, a forma ainda distingue.
+ * Uma peça só para os quatro estados: um ponto do mesmo diâmetro, que muda de
+ * cor. A cor não decide sozinha nos estados de risco — eles pulsam, e movimento
+ * sobrevive ao daltonismo e ao sol forte, onde a diferença de matiz some.
+ */
+const DOT_SIZE = 14;
+
+/**
+ * zIndexOffset separa a pilha por gravidade, não por posição na tela — sem
+ * isso o Leaflet empilha por latitude, e uma estação normal mais ao sul podia
+ * cobrir uma em alerta mais ao norte. O intervalo de 1000 é bem maior que
+ * qualquer disputa de posição consegue vencer.
  */
 const STATUS = {
-    critical: { label: 'Inundação', color: '#d03b3b', shape: 'octagon', size: 30 },
-    alert: { label: 'Alerta', color: '#fab219', shape: 'triangle', size: 28 },
-    normal: { label: 'Normal', color: '#0ca30c', shape: 'check', size: 26 },
-    unknown: { label: 'Sem leitura', color: '#8c8a85', shape: 'dashed', size: 24 },
-};
-
-const SHAPES = {
-    check: '<circle cx="12" cy="12" r="9" fill="COLOR" stroke="#fff" stroke-width="2.5"/><path d="M8 12.3l2.6 2.6L16 9.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
-    triangle: '<path d="M12 2.5L22.5 20.5H1.5z" fill="COLOR" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 9v4.4" stroke="#3d2c00" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.8" r="1.3" fill="#3d2c00"/>',
-    octagon: '<path d="M8.2 2.5h7.6l5.7 5.7v7.6l-5.7 5.7H8.2l-5.7-5.7V8.2z" fill="COLOR" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 7.5v5.2" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="16.4" r="1.4" fill="#fff"/>',
-    dashed: '<circle cx="12" cy="12" r="9" fill="#fff" stroke="COLOR" stroke-width="2.6" stroke-dasharray="3.6 3.2"/><path d="M12 7.6v5" stroke="COLOR" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.3" fill="COLOR"/>',
+    critical: { label: 'Inundação', color: '#d03b3b', zIndexOffset: 3000 },
+    alert: { label: 'Alerta', color: '#fab219', zIndexOffset: 2000 },
+    normal: { label: 'Normal', color: '#0ca30c', zIndexOffset: 1000 },
+    unknown: { label: 'Sem leitura', color: '#8c8a85', zIndexOffset: 0 },
 };
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', {
@@ -38,32 +41,33 @@ const SOURCE_LABEL = {
     sace: 'SGB/CPRM — SACE',
 };
 
-/**
- * O que o morador deve fazer em cada estado. Sai do estado, não do número: quem
- * abre isto durante cheia precisa de instrução, não de interpretação.
- */
-const ACTION = {
-    critical:
-        'Risco imediato. A cota de inundação foi atingida — siga as instruções da Defesa Civil e ligue 199.',
-    alert: 'Risco elevado. A cota de alerta foi atingida — prepare-se e acompanhe as orientações da Defesa Civil.',
-    normal: 'Situação normal. O nível está abaixo da cota de alerta deste ponto.',
-    unknown:
-        'Este ponto está sem leitura recente ou sem cota publicada. Consulte a Defesa Civil pelo 199 antes de tirar conclusões.',
-};
-
 const number = (value, digits = 2) =>
     value.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-function icon(status) {
-    const { color, shape, label, size } = STATUS[status] ?? STATUS.unknown;
-    const half = size / 2;
+/** O mesmo ponto serve o mapa e a lista de filtros — só o tamanho muda. */
+function dot(status, size, label = '') {
+    const { color } = STATUS[status] ?? STATUS.unknown;
+    const meaning = label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"';
+
+    return `<span class="dot" style="--dot:${color};--dot-size:${size}px" ${meaning}></span>`;
+}
+
+/**
+ * Alvo de toque, não tamanho do desenho: o ponto encolheu para não sujar o mapa,
+ * mas o dedo continua acertando a mesma área de sempre.
+ */
+const HIT_AREA = 30;
+
+function icon(station) {
+    const { status } = station;
+    const { label } = STATUS[status] ?? STATUS.unknown;
 
     return L.divIcon({
         className: `station-pin station-pin--${status}`,
-        html: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" role="img" aria-label="${label}">${SHAPES[shape].replaceAll('COLOR', color)}</svg>`,
-        iconSize: [size, size],
-        iconAnchor: [half, half],
-        popupAnchor: [0, -half + 2],
+        html: dot(status, DOT_SIZE, label),
+        iconSize: [HIT_AREA, HIT_AREA],
+        iconAnchor: [HIT_AREA / 2, HIT_AREA / 2],
+        popupAnchor: [0, -DOT_SIZE / 2 - 2],
     });
 }
 
@@ -253,9 +257,6 @@ function popup(station) {
 
             ${gapLine(station)}
 
-            <p class="card-eyebrow">O que fazer</p>
-            <p class="card-action">${ACTION[station.status] ?? ACTION.unknown}</p>
-
             <p class="card-eyebrow">Últimas 24 horas</p>
             ${historyBlock(station)}
 
@@ -265,6 +266,7 @@ function popup(station) {
 }
 
 const stations = JSON.parse(document.getElementById('stations-data').textContent);
+const reports = JSON.parse(document.getElementById('reports-data').textContent);
 
 const map = L.map('map', {
     center: [-29.8, -53.2], // Rio Grande do Sul
@@ -275,147 +277,566 @@ const map = L.map('map', {
     attributionControl: false,
 });
 
-// Voyager do CARTO: terreno neutro, mas rios e lâminas de água em azul
-// definido. O mapa padrão do OSM satura verde e laranja, competindo com as
-// cores de alerta; o Positron apaga a água, que aqui é o assunto.
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd',
-    maxZoom: 19,
-}).addTo(map);
+/**
+ * Sete fontes abertas e gratuitas, sem chave de API — trocar de estilo não
+ * depende de nenhuma infraestrutura nova. Voyager é o padrão: terreno neutro,
+ * mas rios e lâminas de água em azul definido. O OSM satura verde e laranja,
+ * competindo com as cores de alerta; o Positron apaga a água, que aqui é o
+ * assunto — por isso nenhum dos dois é o padrão, mas seguem como opção.
+ */
+const BASEMAPS = [
+    {
+        key: 'voyager',
+        label: 'Voyager',
+        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        subdomains: 'abcd',
+        maxZoom: 19,
+    },
+    {
+        key: 'positron',
+        label: 'Claro',
+        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png',
+        subdomains: 'abcd',
+        maxZoom: 19,
+    },
+    {
+        key: 'dark',
+        label: 'Escuro',
+        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png',
+        subdomains: 'abcd',
+        maxZoom: 19,
+    },
+    {
+        key: 'osm',
+        label: 'OpenStreetMap',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        subdomains: 'abc',
+        maxZoom: 19,
+    },
+    {
+        key: 'topo',
+        label: 'Relevo',
+        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        subdomains: 'abc',
+        maxZoom: 17,
+    },
+    {
+        key: 'satellite',
+        label: 'Satélite',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        maxZoom: 19,
+    },
+    {
+        key: 'humanitarian',
+        label: 'Humanitário',
+        url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+        subdomains: 'abc',
+        maxZoom: 19,
+    },
+];
+
+const BASEMAP_STORAGE_KEY = 'cheias-rs:basemap';
+
+let activeBasemap = null;
+let basemapLayer = null;
+
+function setBasemap(key) {
+    const basemap = BASEMAPS.find((item) => item.key === key) ?? BASEMAPS[0];
+
+    if (basemapLayer) {
+        map.removeLayer(basemapLayer);
+    }
+
+    basemapLayer = L.tileLayer(basemap.url, {
+        subdomains: basemap.subdomains ?? 'abc',
+        maxZoom: basemap.maxZoom,
+    }).addTo(map);
+
+    activeBasemap = basemap;
+
+    // Lembrado entre sessões: quem prefere o mapa escuro à noite não deveria
+    // escolher de novo toda vez que abre a página.
+    localStorage.setItem(BASEMAP_STORAGE_KEY, basemap.key);
+}
+
+setBasemap(localStorage.getItem(BASEMAP_STORAGE_KEY));
 
 /**
- * Uma camada por estado, para o filtro poder ligar e desligar cada um. Numa
- * cheia, o que importa é isolar as estações em risco entre centenas de pins.
+ * Uma camada só, com todos os marcadores dentro — o filtro liga e desliga cada
+ * um individualmente por id, via addLayer/removeLayer/hasLayer do próprio
+ * grupo. Numa cheia, o que importa é isolar as estações em risco entre
+ * centenas de pins.
  */
-const layers = {};
+const stationsLayer = L.layerGroup().addTo(map);
+const markersById = {};
 
-/**
- * Largura e altura do card ficam no CSS, não aqui. Medida em pixels no
- * carregamento não acompanha rotação nem troca de tela; `maxWidth: 0` desliga o
- * cálculo do Leaflet e deixa o layout fluido responder pela viewport.
- */
-const POPUP_OPTIONS = {
-    // O Leaflet grava esta largura em pixels no card e usa o número para
-    // centralizá-lo. Com zero ele escreve 1 px e o card não aparece — o CSS é
-    // que faz a adaptação, mas a conta dele precisa de um valor plausível.
-    maxWidth: 384,
-    minWidth: 200,
-    // Folga para o card não abrir por baixo do botão de filtros nem colar no topo.
-    autoPanPadding: [16, 16],
-    // Mantém o card dentro da vista ao dar zoom: sem isto ele sai da tela junto
-    // com o pin e o usuário perde o que estava lendo.
-    keepInView: true,
-};
+/** station.id -> station, para achar o dado a partir de um data-id no DOM. */
+const stationsById = Object.fromEntries(stations.map((station) => [station.id, station]));
+
+const sidebar = document.getElementById('station-sidebar');
+const sidebarBody = document.getElementById('station-sidebar-body');
+
+/** No desktop, width:0→24rem anima; no celular, o slide é por transform. Os
+ *  dois casos duram 250 ms — invalidateSize cedo demais pega o mapa no meio
+ *  do caminho, e só o desktop de fato muda o tamanho do container do mapa. */
+function resizeMapAfterSidebar() {
+    setTimeout(() => map.invalidateSize({ animate: true }), 260);
+}
+
+function closeStationSidebar() {
+    sidebar.dataset.open = 'false';
+    resizeMapAfterSidebar();
+}
+
+document.querySelector('.station-sidebar-close').addEventListener('click', closeStationSidebar);
+
+// Clicar no mapa vazio fecha o card — clique em marcador não chega aqui,
+// o Leaflet já para a propagação antes.
+map.on('click', () => {
+    if (sidebar.dataset.open === 'true') {
+        closeStationSidebar();
+    }
+});
+
+/** No celular cobre a tela inteira; no desktop empurra o mapa — o mesmo
+ *  elemento, o CSS decide a apresentação. */
+function showStationDetail(station) {
+    sidebarBody.innerHTML = popup(station);
+    sidebar.dataset.open = 'true';
+    resizeMapAfterSidebar();
+}
 
 stations.forEach((station) => {
     const status = STATUS[station.status] ?? STATUS.unknown;
 
     const marker = L.marker([station.latitude, station.longitude], {
-        icon: icon(station.status),
+        icon: icon(station),
         title: `${station.name} — ${status.label}`,
         alt: `${station.name} — ${status.label}`,
         riseOnHover: true,
+        zIndexOffset: status.zIndexOffset,
     });
 
-    marker.bindPopup(popup(station), POPUP_OPTIONS);
+    marker.on('click', () => showStationDetail(station));
 
-    (layers[station.status] ??= L.layerGroup().addTo(map)).addLayer(marker);
+    markersById[station.id] = marker;
+
+    // Todo status começa visível: 'unknown' cobre tanto "nunca teve leitura"
+    // quanto "leitura ficou velha" (Station::status()), e o segundo caso é
+    // exatamente o que não pode desaparecer numa cheia — fonte indisponível é
+    // estado visível, nunca lacuna silenciosa.
+    stationsLayer.addLayer(marker);
 });
 
 /**
- * Filtro por estado. Caixa de seleção em vez de linha de legenda: a lista serve
- * para ligar e desligar estados, e precisa parecer o que é. A ordem de STATUS já
- * vai do mais grave ao menos.
+ * Relato de morador é camada própria, nunca misturada com o pin de estação —
+ * nem no ícone (quadrado, não círculo), nem no popup (aviso "não é medição
+ * oficial" sempre visível), nem no grupo do Leaflet.
  */
-const filters = L.control({ position: 'topleft' });
+const reportsLayer = L.layerGroup().addTo(map);
 
-filters.onAdd = () => {
-    const container = L.DomUtil.create('div', 'filters');
-    const present = Object.keys(STATUS).filter((key) => layers[key] !== undefined);
-    const total = present.reduce((sum, key) => sum + layers[key].getLayers().length, 0);
+function reportIcon() {
+    return L.divIcon({
+        className: 'report-pin',
+        // Mesma câmera do botão "Enviar foto do rio" (ICON_CAMERA, definida
+        // mais abaixo) — duplicada aqui em vez de referenciada porque este
+        // código roda antes daquele const existir.
+        html: `
+            <span class="report-marker" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" stroke-width="2.3" stroke-linejoin="round">
+                    <path d="M3 8.5A2.5 2.5 0 015.5 6h1.2l1-1.6A1 1 0 018.5 4h7a1 1 0 01.85.4L17.3 6h1.2A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z"/>
+                    <circle cx="12" cy="12.5" r="3.4"/>
+                </svg>
+            </span>
+        `,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+        popupAnchor: [0, -10],
+    });
+}
 
-    const rows = present
-        .map((key) => {
-            const { label, color, shape } = STATUS[key];
+reports.forEach((report) => {
+    const marker = L.marker([report.latitude, report.longitude], {
+        icon: reportIcon(),
+        title: 'Relato de morador',
+        alt: 'Relato de morador',
+    });
 
-            return `
-                <li>
-                    <label>
-                        <input type="checkbox" data-status="${key}" checked>
-                        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">${SHAPES[shape].replaceAll('COLOR', color)}</svg>
-                        <span>${label}</span>
-                        <em>${layers[key].getLayers().length}</em>
-                    </label>
-                </li>
-            `;
-        })
-        .join('');
-
-    container.innerHTML = `
-        <button type="button" class="filters-toggle" aria-expanded="false" aria-controls="filters-panel">
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <path d="M3 5.5h18l-7 8v5.5l-4 2v-7.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
-            </svg>
-            <span>Filtros</span>
-            <em id="filters-count">${total}</em>
-        </button>
-        <div class="filters-panel" id="filters-panel" hidden>
-            <ul class="filters-list">${rows}</ul>
+    marker.bindPopup(`
+        <div class="report-popup">
+            <p class="report-popup-kind">Relato de morador · não é medição oficial</p>
+            <img class="report-popup-photo" src="${report.photoUrl}" alt="Foto enviada por morador">
+            <p class="report-popup-date">${dateFormat.format(new Date(report.createdAt))}</p>
         </div>
+    `);
+
+    reportsLayer.addLayer(marker);
+});
+
+/**
+ * Dock: todos os controles do mapa numa barra só, no alto à esquerda. Espalhados
+ * por dois cantos, o polegar precisava atravessar a tela para ir do filtro à
+ * câmera.
+ *
+ * O botão de estações nasce aqui; os demais entram por dockButton(), na ordem
+ * em que o arquivo os define.
+ */
+let dockBar = null;
+
+/** Clicar de novo no botão que abriu fecha — abre e fecha alternam no mesmo
+ *  botão, sem depender só do X. */
+function toggleDialog(dialog) {
+    if (dialog.open) {
+        dialog.close();
+    } else {
+        dialog.showModal();
+    }
+}
+
+/** Clicar fora do cartão (no fundo escurecido) fecha — só existe fundo
+ *  clicável no desktop; em tela cheia no celular o dialog não sobra área para
+ *  clicar fora. O clique no backdrop chega aqui com o próprio dialog como
+ *  alvo, nunca um filho dele. */
+function closeOnBackdropClick(dialog) {
+    dialog.addEventListener('click', (event) => {
+        if (event.target === dialog) {
+            dialog.close();
+        }
+    });
+}
+
+closeOnBackdropClick(document.getElementById('stations'));
+closeOnBackdropClick(document.getElementById('about'));
+closeOnBackdropClick(document.getElementById('donate'));
+
+/** O botão de estações abre o modal — só o dock nasce como controle do Leaflet. */
+const tools = L.control({ position: 'topleft' });
+
+tools.onAdd = () => {
+    const container = L.DomUtil.create('div', 'tools');
+
+    // Ícone "waves" do Lucide (lucide.dev), sem alteração de path — só o
+    // stroke-width ajustado para bater com o peso dos outros ícones do dock.
+    container.innerHTML = `
+        <div class="dock">
+            <button type="button" class="filters-toggle"
+                    aria-label="Estações fluviométricas" title="Estações fluviométricas">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+                     stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M2 12q2.5 2 5 0t5 0 5 0 5 0" />
+                    <path d="M2 19q2.5 2 5 0t5 0 5 0 5 0" />
+                    <path d="M2 5q2.5 2 5 0t5 0 5 0 5 0" />
+                </svg>
+                <em id="filters-count">${stations.length}</em>
+            </button>
+        </div>
+        <div class="basemap-panel" id="basemap-panel" hidden></div>
     `;
 
-    const toggle = container.querySelector('.filters-toggle');
-    const panel = container.querySelector('.filters-panel');
-    const count = container.querySelector('#filters-count');
+    dockBar = container.querySelector('.dock');
 
-    toggle.addEventListener('click', () => {
-        panel.hidden = !panel.hidden;
-        toggle.setAttribute('aria-expanded', String(!panel.hidden));
+    container.querySelector('.filters-toggle').addEventListener('click', () => {
+        toggleDialog(document.getElementById('stations'));
     });
 
-    container.querySelectorAll('input[data-status]').forEach((box) => {
-        box.addEventListener('change', () => {
-            const layer = layers[box.dataset.status];
-
-            if (box.checked) {
-                map.addLayer(layer);
-            } else {
-                map.removeLayer(layer);
-            }
-
-            // Quantas estações estão à vista: sem isso não se sabe o que o filtro
-            // escondeu com o painel fechado.
-            count.textContent = present
-                .filter((key) => map.hasLayer(layers[key]))
-                .reduce((sum, key) => sum + layers[key].getLayers().length, 0);
-        });
-    });
-
-    // Sem isso, arrastar ou rolar sobre o painel move o mapa por baixo dele.
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.disableScrollPropagation(container);
 
     return container;
 };
 
-filters.addTo(map);
+tools.addTo(map);
 
-/** Exigida pela licença dos tiles: fica no canto, discreta e sempre visível. */
-const credit = L.control({ position: 'bottomleft' });
+/**
+ * Modal de estações: painel de dados, não só um filtro. Busca e chips por
+ * estado restringem o que aparece NESTA lista; o olho em cada linha controla
+ * o mapa, e são coisas diferentes de propósito — filtrar a lista não esconde
+ * nada do mapa, só ajuda a achar. Clicar no corpo da linha fecha o modal e
+ * abre aquela estação no mapa, como clicar o pin direto.
+ */
+{
+    const body = document.getElementById('stations-body');
+    const search = document.getElementById('stations-search');
+    const chipsBar = document.getElementById('stations-chips');
+    const count = document.getElementById('filters-count');
 
-credit.onAdd = () => {
-    const container = L.DomUtil.create('div', 'map-credit');
+    const normalize = (value) => value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
-    container.innerHTML =
-        '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' +
-        ' · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>';
+    const groups = Object.keys(STATUS)
+        .map((key) => ({ key, ...STATUS[key], stations: stations.filter((station) => station.status === key) }))
+        .filter((group) => group.stations.length > 0);
+
+    // Fora do DOM: usado na busca, nunca precisa ser HTML-seguro.
+    const searchIndex = {};
+
+    const EYE_ICON =
+        '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
+        '<circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/>';
+
+    function stationRow(group, station) {
+        const place = [station.river, station.municipality].filter(Boolean).join(' · ');
+        const { reading, unit } = station;
+        const visible = true;
+
+        searchIndex[station.id] = normalize(`${station.name} ${place}`);
+
+        return `
+            <li class="station-row" data-id="${station.id}" data-status="${group.key}"
+                data-visible="${visible}" style="--status:${group.color}">
+                <button type="button" class="station-open" data-id="${station.id}">
+                    ${dot(group.key, 10)}
+                    <span class="station-text">
+                        <span class="station-name">${escape(station.name)}</span>
+                        ${place ? `<span class="station-place">${escape(place)}</span>` : ''}
+                    </span>
+                    <span class="station-reading">
+                        <strong>${number(reading.value)} ${escape(unit ?? 'm')}</strong>
+                        <span class="card-time">${dateFormat.format(new Date(reading.measuredAt))}</span>
+                    </span>
+                </button>
+                <button type="button" class="station-eye" data-id="${station.id}" aria-pressed="${visible}"
+                        aria-label="Mostrar ou ocultar ${escape(station.name)} no mapa" title="Mostrar/ocultar no mapa">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${EYE_ICON}</svg>
+                </button>
+            </li>
+        `;
+    }
+
+    body.innerHTML = `
+        <ul class="station-list">
+            ${groups
+                .map(
+                    (group) => `
+                        <li class="station-group" data-status="${group.key}">
+                            <div class="station-group-head">
+                                <p class="station-group-title">${group.label} <em>${group.stations.length}</em></p>
+                                <button type="button" class="station-group-toggle" data-status="${group.key}"
+                                        aria-pressed="true"
+                                        aria-label="Mostrar ou ocultar ${group.label} no mapa"
+                                        title="Mostrar/ocultar categoria no mapa">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">${EYE_ICON}</svg>
+                                </button>
+                            </div>
+                            <ul class="station-group-rows">
+                                ${group.stations.map((station) => stationRow(group, station)).join('')}
+                            </ul>
+                        </li>
+                    `,
+                )
+                .join('')}
+        </ul>
+    `;
+
+    chipsBar.innerHTML = [
+        `<button type="button" class="chip" aria-pressed="true">Todas <em>${stations.length}</em></button>`,
+        ...groups.map(
+            (group) => `
+                <button type="button" class="chip" data-status="${group.key}" aria-pressed="false">
+                    ${dot(group.key, 8)} ${group.label} <em>${group.stations.length}</em>
+                </button>
+            `,
+        ),
+    ].join('');
+
+    let activeStatus = null;
+
+    // Busca e chip precisam concordar para uma linha aparecer; o cabeçalho do
+    // grupo some junto se nenhuma estação dele sobrar.
+    function applyFilter() {
+        const query = normalize(search.value.trim());
+
+        body.querySelectorAll('.station-group').forEach((group) => {
+            const groupMatches = activeStatus === null || group.dataset.status === activeStatus;
+            let visible = 0;
+
+            group.querySelectorAll('.station-row').forEach((row) => {
+                const show = groupMatches && (query === '' || searchIndex[row.dataset.id].includes(query));
+
+                row.hidden = !show;
+                visible += show ? 1 : 0;
+            });
+
+            group.hidden = visible === 0;
+        });
+    }
+
+    search.addEventListener('input', applyFilter);
+
+    chipsBar.querySelectorAll('.chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            activeStatus = chip.dataset.status ?? null;
+
+            chipsBar.querySelectorAll('.chip').forEach((other) => other.setAttribute('aria-pressed', String(other === chip)));
+            applyFilter();
+        });
+    });
+
+    // Quantas estações estão à vista no mapa: sem isso não se sabe o que ficou
+    // escondido depois de fechar o modal.
+    function refreshCount() {
+        count.textContent = stations.filter((station) => stationsLayer.hasLayer(markersById[station.id])).length;
+    }
+
+    function setStationVisible(id, show) {
+        const marker = markersById[id];
+        const row = body.querySelector(`.station-row[data-id="${id}"]`);
+
+        row.dataset.visible = String(show);
+        row.querySelector('.station-eye').setAttribute('aria-pressed', String(show));
+
+        if (show) {
+            stationsLayer.addLayer(marker);
+        } else {
+            stationsLayer.removeLayer(marker);
+        }
+    }
+
+    // O botão do grupo reflete se todas as estações dele estão à vista: clicar
+    // sempre inverte esse total, mesmo depois de toques individuais terem
+    // mudado algumas por baixo dele.
+    function refreshGroupToggle(groupLi) {
+        const rows = [...groupLi.querySelectorAll('.station-row')];
+        const allVisible = rows.every((row) => row.dataset.visible === 'true');
+
+        groupLi.querySelector('.station-group-toggle').setAttribute('aria-pressed', String(allVisible));
+    }
+
+    body.querySelectorAll('.station-eye').forEach((eye) => {
+        eye.addEventListener('click', () => {
+            setStationVisible(eye.dataset.id, eye.getAttribute('aria-pressed') === 'false');
+            refreshGroupToggle(eye.closest('.station-group'));
+            refreshCount();
+        });
+    });
+
+    // Oculta ou mostra a categoria inteira de uma vez — útil numa cheia, para
+    // sumir com o que não informa nada e sobrar só o que importa.
+    body.querySelectorAll('.station-group-toggle').forEach((toggle) => {
+        toggle.addEventListener('click', () => {
+            const show = toggle.getAttribute('aria-pressed') === 'false';
+            const groupLi = toggle.closest('.station-group');
+
+            groupLi.querySelectorAll('.station-row').forEach((row) => setStationVisible(row.dataset.id, show));
+
+            toggle.setAttribute('aria-pressed', String(show));
+            refreshCount();
+        });
+    });
+
+    body.querySelectorAll('.station-open').forEach((open) => {
+        open.addEventListener('click', () => {
+            const { id } = open.dataset;
+            const marker = markersById[id];
+
+            if (!stationsLayer.hasLayer(marker)) {
+                setStationVisible(id, true);
+                refreshGroupToggle(open.closest('.station-group'));
+                refreshCount();
+            }
+
+            document.getElementById('stations').close();
+            map.setView(marker.getLatLng(), Math.max(map.getZoom(), 13));
+            showStationDetail(stationsById[id]);
+        });
+    });
+
+    refreshCount();
+}
+
+/** Acrescenta um botão ao dock, à direita dos que já estão lá. */
+function dockButton({ label, icon, onClick }) {
+    dockBar.insertAdjacentHTML(
+        'beforeend',
+        `<button type="button" aria-label="${label}" title="${label}">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">${icon}</svg>
+        </button>`,
+    );
+
+    dockBar.lastElementChild.addEventListener('click', onClick);
+}
+
+const ICON_LAYERS =
+    '<path d="M12 3L21 8.5L12 14L3 8.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
+    '<path d="M3 13.5L12 19L21 13.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+
+/**
+ * Estilo do mapa: painel pequeno pendurado no dock, não modal — é uma escolha
+ * única entre poucas opções, e ver o mapa por trás ajuda a decidir. Cada opção
+ * traz a ladrilha real da própria fonte sobre o RS, não um nome só: a paleta
+ * de cada estilo se vê antes de escolher.
+ */
+{
+    const panel = document.getElementById('basemap-panel');
+
+    // Um ladrilho fixo sobre o RS (zoom 6), o mesmo em todo estilo — a
+    // miniatura mostra a paleta, não uma região qualquer do mundo.
+    const PREVIEW_TILE = { z: 6, x: 22, y: 37 };
+
+    function previewUrl(basemap) {
+        const subdomain = (basemap.subdomains ?? 'a')[0];
+
+        return basemap.url
+            .replace('{s}', subdomain)
+            .replace('{z}', PREVIEW_TILE.z)
+            .replace('{x}', PREVIEW_TILE.x)
+            .replace('{y}', PREVIEW_TILE.y)
+            .replace('{r}', '');
+    }
+
+    panel.innerHTML = `
+        <p class="basemap-panel-title">Estilo do mapa</p>
+        <ul class="basemap-list">
+            ${BASEMAPS.map(
+                (basemap) => `
+                    <li>
+                        <button type="button" class="basemap-item" data-key="${basemap.key}"
+                                aria-pressed="${basemap.key === activeBasemap.key}">
+                            <img class="basemap-preview" src="${previewUrl(basemap)}" alt="" width="40" height="40" loading="lazy">
+                            <span class="basemap-label">${basemap.label}</span>
+                            <svg class="basemap-check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                                <path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </li>
+                `,
+            ).join('')}
+        </ul>
+    `;
+
+    panel.querySelectorAll('.basemap-item').forEach((item) => {
+        item.addEventListener('click', () => {
+            setBasemap(item.dataset.key);
+            panel.querySelectorAll('.basemap-item').forEach((other) => other.setAttribute('aria-pressed', String(other === item)));
+            panel.hidden = true;
+        });
+    });
+
+    dockButton({
+        label: 'Estilo do mapa',
+        icon: ICON_LAYERS,
+        onClick: () => {
+            panel.hidden = !panel.hidden;
+        },
+    });
+}
+
+/** O que cada cor quer dizer. Sempre à vista: ler o mapa não pode depender de
+ *  abrir o filtro nem de lembrar da convenção. */
+const legend = L.control({ position: 'bottomleft' });
+
+legend.onAdd = () => {
+    const container = L.DomUtil.create('ul', 'legend');
+
+    container.innerHTML = Object.entries(STATUS)
+        .map(([key, { label }]) => `<li>${dot(key, 14)}${label}</li>`)
+        .join('');
 
     L.DomEvent.disableClickPropagation(container);
 
     return container;
 };
 
-credit.addTo(map);
+legend.addTo(map);
 
 /**
  * Telefone, não tablet. Ponteiro grosso já separa toque de mouse, mas tablet
@@ -429,35 +850,32 @@ function onPhone() {
     );
 }
 
-/** Botão flutuante ancorado no canto, no padrão de controle do Leaflet. */
-function floatingButton({ label, icon, onClick }) {
-    const control = L.control({ position: 'bottomright' });
+/** Abaixo disto o fixo é de GPS e não vale seguir gastando bateria. */
+const GOOD_ENOUGH_METRES = 15;
 
-    control.onAdd = () => {
-        const container = L.DomUtil.create('div', 'fab');
+/** GPS frio leva de 30 a 60 s para travar, e o primeiro fixo é sempre de rede. */
+const REFINE_TIMEOUT_MS = 60000;
 
-        container.innerHTML = `
-            <button type="button" aria-label="${label}" title="${label}">
-                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">${icon}</svg>
-            </button>
-        `;
-
-        container.querySelector('button').addEventListener('click', onClick);
-
-        L.DomEvent.disableClickPropagation(container);
-
-        return container;
-    };
-
-    control.addTo(map);
-
-    return control;
+/**
+ * No celular vale acompanhar o refinamento: o primeiro fixo vem da rede e o
+ * GPS entra depois. No desktop não há GPS para esperar — um único fixo de
+ * rede é tudo que existe, watch só repetiria o mesmo valor impreciso.
+ */
+function locateOptions() {
+    return onPhone()
+        ? { watch: true, setView: false, enableHighAccuracy: true, maximumAge: 0, timeout: REFINE_TIMEOUT_MS }
+        : { setView: false, timeout: REFINE_TIMEOUT_MS };
 }
 
 const ICON_LOCATE =
     '<circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
     '<circle cx="12" cy="12" r="2" fill="currentColor"/>' +
     '<path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+
+const ICON_INFO =
+    '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/>' +
+    '<path d="M12 11v5.2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>' +
+    '<circle cx="12" cy="7.9" r="1.25" fill="currentColor"/>';
 
 const ICON_CAMERA =
     '<path d="M3 8.5A2.5 2.5 0 015.5 6h1.2l1-1.6A1 1 0 018.5 4h7a1 1 0 01.85.4L17.3 6h1.2A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>' +
@@ -469,14 +887,6 @@ const ICON_CAMERA =
 {
     const here = L.layerGroup().addTo(map);
 
-    /** Abaixo disto o fixo é de GPS e não vale seguir gastando bateria. */
-    const GOOD_ENOUGH_METRES = 15;
-
-    /**
-     * GPS frio leva de 30 a 60 s para travar, e o primeiro fixo é sempre de rede.
-     */
-    const REFINE_TIMEOUT_MS = 60000;
-
     let centred = false;
     let bestAccuracy = Infinity;
     let giveUp = null;
@@ -487,7 +897,7 @@ const ICON_CAMERA =
         giveUp = null;
     }
 
-    floatingButton({
+    dockButton({
         label: 'Ir para minha localização',
         icon: ICON_LOCATE,
         onClick: () => {
@@ -496,19 +906,7 @@ const ICON_CAMERA =
             clearTimeout(giveUp);
             giveUp = setTimeout(stopLocating, REFINE_TIMEOUT_MS);
 
-            // No celular vale acompanhar o refinamento: o primeiro fixo vem da rede
-            // e o GPS entra depois. No desktop não há GPS para esperar.
-            map.locate(
-                onPhone()
-                    ? {
-                        watch: true,
-                        setView: false,
-                        enableHighAccuracy: true,
-                        maximumAge: 0,
-                        timeout: REFINE_TIMEOUT_MS,
-                    }
-                    : { setView: false, timeout: REFINE_TIMEOUT_MS },
-            );
+            map.locate(locateOptions());
         },
     });
 
@@ -567,6 +965,18 @@ const ICON_CAMERA =
     let photo = null;
     let pickerMap = null;
     let pickerMarker = null;
+
+    /** Mesmo refinamento do botão "Ir para minha localização": o primeiro fixo de
+     *  GPS costuma vir da rede, e um único fixo sem refinar é o que fazia o ponto
+     *  cair longe do lugar certo. */
+    let bestAccuracy = Infinity;
+    let giveUp = null;
+
+    function stopReportLocating() {
+        pickerMap.stopLocate();
+        clearTimeout(giveUp);
+        giveUp = null;
+    }
 
     function say(message) {
         status.textContent = message;
@@ -635,12 +1045,43 @@ const ICON_CAMERA =
 
         // Marcar tocando é mais direto que arrastar num mapa de 11 rem.
         pickerMap.on('click', (event) => setPosition(event.latlng, 'manual'));
+
+        pickerMap.on('locationfound', (event) => {
+            // Mesma regra do botão principal: fixo pior que o já obtido é ruído
+            // do rádio, não deve puxar o ponto de volta para um lugar pior.
+            if (event.accuracy > bestAccuracy) {
+                return;
+            }
+
+            bestAccuracy = event.accuracy;
+            setPosition(event.latlng, 'gps');
+
+            if (event.accuracy <= GOOD_ENOUGH_METRES) {
+                stopReportLocating();
+            } else {
+                say(`Refinando o GPS — ainda impreciso por até ${Math.round(event.accuracy)} m…`);
+            }
+        });
+
+        pickerMap.on('locationerror', (event) => {
+            stopReportLocating();
+            say(`Não foi possível localizar: ${event.message}`);
+        });
     }
 
-    floatingButton({
+    dockButton({
         label: 'Enviar foto do rio',
         icon: ICON_CAMERA,
         onClick: () => {
+            // Sem clique fora para fechar aqui: é formulário com dado (foto,
+            // local) — um toque perdido no mapa não pode descartar o que a
+            // pessoa já preencheu.
+            if (form.open) {
+                form.close();
+
+                return;
+            }
+
             form.showModal();
 
             if (pickerMap === null) {
@@ -680,22 +1121,30 @@ const ICON_CAMERA =
     document.getElementById('report-locate').addEventListener('click', () => {
         say('Localizando…');
 
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const { latitude, longitude, accuracy } = position.coords;
+        bestAccuracy = Infinity;
+        clearTimeout(giveUp);
+        giveUp = setTimeout(stopReportLocating, REFINE_TIMEOUT_MS);
 
-                setPosition(L.latLng(latitude, longitude), 'gps');
-
-                // Fixo grosseiro não é local: pedir confirmação é melhor que
-                // registrar o centro da cidade como origem da foto.
-                if (accuracy > 100) {
-                    say(`O GPS errou por até ${Math.round(accuracy)} m. Confirme o ponto no mapa.`);
-                }
-            },
-            (error) => say(`Não foi possível localizar: ${error.message}`),
-            { enableHighAccuracy: true, timeout: 20000 },
-        );
+        pickerMap.locate(locateOptions());
     });
+
+    const CEP_PATTERN = /^\d{5}-?\d{3}$/;
+
+    /**
+     * Resolve CEP em logradouro via ViaCEP — gratuito, sem chave, mesma linha do
+     * resto do projeto. Devolve null para CEP inexistente; string vazia nunca:
+     * localidade e UF sempre vêm preenchidos quando o CEP é válido.
+     */
+    async function resolveCep(cep) {
+        const digits = cep.replace(/\D/g, '');
+        const data = await fetch(`https://viacep.com.br/ws/${digits}/json/`).then((response) => response.json());
+
+        if (data.erro) {
+            return null;
+        }
+
+        return [data.logradouro, data.bairro, data.localidade, data.uf].filter(Boolean).join(', ');
+    }
 
     async function findAddress() {
         const query = address.value.trim();
@@ -707,10 +1156,27 @@ const ICON_CAMERA =
         say('Buscando endereço…');
 
         try {
+            let geocodeQuery = `${query}, Rio Grande do Sul, Brasil`;
+
+            // CEP não é endereço: o Nominatim não tem cobertura de CEP no Brasil,
+            // então o número sozinho nunca batia com nada. O ViaCEP (gratuito, sem
+            // chave) resolve o CEP em logradouro antes de geocodificar.
+            if (CEP_PATTERN.test(query)) {
+                const resolved = await resolveCep(query);
+
+                if (resolved === null) {
+                    say('CEP não encontrado. Confira o número, ou marque no mapa.');
+
+                    return;
+                }
+
+                geocodeQuery = `${resolved}, Brasil`;
+            }
+
             const url = new URL('https://nominatim.openstreetmap.org/search');
 
             url.search = new URLSearchParams({
-                q: `${query}, Rio Grande do Sul, Brasil`,
+                q: geocodeQuery,
                 format: 'json',
                 limit: '1',
             });
@@ -742,15 +1208,204 @@ const ICON_CAMERA =
 
     consent.addEventListener('change', refresh);
 
-    // Não há para onde enviar ainda. Aceitar a foto e descartá-la faria alguém
-    // acreditar que pediu socorro durante uma cheia.
-    submit.addEventListener('click', () => {
+    function resetForm() {
+        photo = null;
+        picked = null;
+        fileInput.value = '';
+        preview.hidden = true;
+        fileLabel.textContent = 'Tirar foto ou escolher do aparelho';
+        consent.checked = false;
+        address.value = '';
+        describePosition();
+        refresh();
+    }
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+    submit.addEventListener('click', async () => {
         submit.disabled = true;
-        say(
-            'O recebimento de relatos ainda não está ativo — sua foto não foi enviada a ninguém. ' +
-                'Em emergência, ligue 199 (Defesa Civil) ou 193 (Bombeiros).',
-        );
+        say('Enviando…');
+
+        const body = new FormData();
+        body.append('photo', photo);
+        body.append('latitude', picked.lat);
+        body.append('longitude', picked.lng);
+        body.append('position_source', picked.source);
+        body.append('consent', consent.checked ? '1' : '0');
+
+        try {
+            const response = await fetch('/api/reports', {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrfToken, Accept: 'application/json' },
+                body,
+            });
+
+            if (response.status === 429) {
+                say('Muitos relatos enviados em pouco tempo. Tente de novo mais tarde.');
+                submit.disabled = false;
+
+                return;
+            }
+
+            if (response.status === 422) {
+                const { message } = await response.json();
+                say(message ?? 'Não foi possível enviar. Confira os dados e tente de novo.');
+                submit.disabled = false;
+
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('request failed');
+            }
+
+            // O relato só entra no mapa depois de aprovado — reseta o formulário
+            // em vez de já mostrar o pino, para não sugerir uma publicação que
+            // ainda não aconteceu.
+            resetForm();
+            say('Relato enviado — obrigado. Ele passa por uma checagem antes de aparecer no mapa.');
+        } catch {
+            say('Falha ao enviar. Confira sua conexão e tente de novo.');
+            submit.disabled = false;
+        }
     });
+}
+
+// Por último no dock, à direita dos demais: o que é um ponto e quem mediu é a
+// pergunta que segue a primeira olhada no mapa, não a primeira ação nele.
+dockButton({
+    label: 'Sobre os dados',
+    icon: ICON_INFO,
+    onClick: () => toggleDialog(document.getElementById('about')),
+});
+
+const ICON_HEART =
+    '<path d="M12 20.2C7.8 17.4 3 13.4 3 8.9 3 6.2 5.1 4 7.7 4c1.7 0 3.2.9 4.3 2.3C13.1 4.9 14.6 4 16.3 4 18.9 4 21 6.2 21 8.9c0 4.5-4.8 8.5-9 11.3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>';
+
+dockButton({
+    label: 'Apoiar o projeto',
+    icon: ICON_HEART,
+    onClick: () => toggleDialog(document.getElementById('donate')),
+});
+
+/* ---- Doação por Pix -------------------------------------------------------
+
+   QR Code Pix estático com valor livre: a pessoa escolhe o quanto, o valor
+   entra no próprio payload (campo 54 do BR Code) — sem servidor, sem conta a
+   mais, só a chave que já existe. */
+{
+    const pix = JSON.parse(document.getElementById('pix-data').textContent);
+
+    // Sem chave, o Blade já renderizou só o aviso — nenhum destes elementos existe.
+    if (pix.key) {
+        const amountsBar = document.getElementById('donate-amounts');
+        const valueInput = document.getElementById('donate-value');
+        const qrBox = document.getElementById('donate-qr');
+        const copyButton = document.getElementById('donate-copy');
+        const status = document.getElementById('donate-status');
+
+        let payload = '';
+
+        /**
+         * CRC16/CCITT-FALSE (poli 0x1021, início 0xFFFF) — o checksum exigido
+         * pelo padrão BR Code do Banco Central, calculado sobre o payload
+         * inteiro com o campo 63 ainda vazio.
+         */
+        function crc16(text) {
+            let crc = 0xffff;
+
+            for (let i = 0; i < text.length; i++) {
+                crc ^= text.charCodeAt(i) << 8;
+
+                for (let bit = 0; bit < 8; bit++) {
+                    crc = (crc & 0x8000) !== 0 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+                }
+            }
+
+            return crc.toString(16).toUpperCase().padStart(4, '0');
+        }
+
+        const tlv = (id, value) => `${id}${String(value.length).padStart(2, '0')}${value}`;
+
+        /** Monta o BR Code (EMV QRCPS-MPM) Pix estático, com valor opcional. */
+        function pixPayload(amount) {
+            const merchantAccount = tlv('00', 'br.gov.bcb.pix') + tlv('01', pix.key);
+            const additionalData = tlv('05', '***');
+
+            const fields =
+                tlv('00', '01') +
+                tlv('26', merchantAccount) +
+                tlv('52', '0000') +
+                tlv('53', '986') +
+                (amount > 0 ? tlv('54', amount.toFixed(2)) : '') +
+                tlv('58', 'BR') +
+                tlv('59', pix.name.slice(0, 25)) +
+                tlv('60', pix.city.slice(0, 15)) +
+                tlv('62', additionalData);
+
+            const withCrcId = `${fields}6304`;
+
+            return withCrcId + crc16(withCrcId);
+        }
+
+        function say(message) {
+            status.hidden = message === '';
+            status.textContent = message;
+        }
+
+        function render() {
+            const amount = parseFloat(valueInput.value.replace(',', '.'));
+
+            if (!(amount > 0)) {
+                qrBox.hidden = true;
+                copyButton.hidden = true;
+                say('');
+
+                return;
+            }
+
+            payload = pixPayload(amount);
+
+            const qr = qrcode(0, 'M');
+            qr.addData(payload);
+            qr.make();
+
+            qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2 });
+            qrBox.hidden = false;
+            copyButton.hidden = false;
+            say('');
+        }
+
+        function syncChips() {
+            amountsBar.querySelectorAll('.chip').forEach((chip) => {
+                chip.setAttribute('aria-pressed', String(chip.dataset.amount === valueInput.value));
+            });
+        }
+
+        amountsBar.querySelectorAll('.chip').forEach((chip) => {
+            chip.addEventListener('click', () => {
+                valueInput.value = chip.dataset.amount;
+                syncChips();
+                render();
+            });
+        });
+
+        valueInput.addEventListener('input', () => {
+            syncChips();
+            render();
+        });
+
+        // A imagem é o caminho principal, mas o código copiado é o mesmo texto
+        // que o app do banco lê — funciona mesmo se o QR não escanear bem.
+        copyButton.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(payload);
+                say('Código copiado — cole no seu app do banco.');
+            } catch {
+                say('Não foi possível copiar automaticamente. Selecione o valor e copie pelo QR Code.');
+            }
+        });
+    }
 }
 
 // O aviso reaparece a cada nova sessão: quem chega numa emergência precisa saber

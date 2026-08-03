@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Reading;
+use App\Models\Report;
+use App\Models\Setting;
 use App\Models\Station;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
@@ -16,13 +18,15 @@ class MapController extends Controller
 
     public function __invoke(): View
     {
-        // Só vai ao mapa quem tem leitura própria. Estação catalogada sem medição
-        // não informa nada — vira ruído sobre as que informam.
+        // Só vai ao mapa quem tem leitura própria. As sem nenhuma são, na prática,
+        // cadastro do SNIRH sem telemetria — nunca vão medir, e listadas viram
+        // ruído sobre as 55 que informam de verdade.
         $stations = Station::with(['latestReading', 'recentReadings'])
             ->whereHas('readings')
             ->orderBy('name')
             ->get()
             ->map(fn (Station $station): array => [
+                'id' => $station->id,
                 'name' => $station->name,
                 'river' => $station->river,
                 'municipality' => $station->municipality,
@@ -46,7 +50,41 @@ class MapController extends Controller
                 'history' => $this->history($station->recentReadings),
             ]);
 
-        return view('map', ['stations' => $stations]);
+        // Relato aprovado é camada à parte da telemetria — nunca entra na lista
+        // de $stations nem em 'reading', para não se misturar com medição oficial.
+        $reports = Report::where('status', 'approved')
+            ->get()
+            ->map(fn (Report $report): array => [
+                'id' => $report->id,
+                'latitude' => $report->latitude,
+                'longitude' => $report->longitude,
+                'photoUrl' => $report->photoUrl(),
+                'createdAt' => $report->created_at->toIso8601String(),
+            ]);
+
+        $setting = Setting::current();
+
+        return view('map', [
+            'stations' => $stations,
+            'reports' => $reports,
+            // Total do catálogo, para o aviso dizer quantas ficaram de fora por
+            // nunca terem reportado — sem isso, o número de estações no mapa
+            // pareceria o total, e não uma fração dele.
+            'catalogTotal' => Station::count(),
+            // Proveniência à vista no aviso de entrada: quantas estações cada
+            // fonte trouxe. Contado agora, nunca escrito à mão — número fixo em
+            // texto mente na primeira importação.
+            'sources' => Station::selectRaw('source, count(*) as total')
+                ->groupBy('source')
+                ->pluck('total', 'source'),
+            // Chave vazia é estado válido: o botão de doação vira aviso de "não
+            // configurado" em vez de gerar QR Code para lugar nenhum.
+            'pix' => [
+                'key' => $setting->pix_key,
+                'name' => $setting->pix_receiver_name ?? 'Cheias RS',
+                'city' => $setting->pix_receiver_city ?? 'PORTO ALEGRE',
+            ],
+        ]);
     }
 
     /**

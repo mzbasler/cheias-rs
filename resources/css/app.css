@@ -27,31 +27,177 @@
     --rule: var(--color-stone-200);
 }
 
-/* O pin é só o SVG: sem caixa, sem fundo, sem sombra do Leaflet. */
+/* ---- Layout do mapa ---- */
+
+.map-layout {
+    display: flex;
+    height: 100dvh;
+}
+
+#map {
+    flex: 1;
+    min-width: 0;
+}
+
+/* No celular, o card cobre a tela inteira deslizando da direita — não tem como
+   "empurrar" o mapa numa tela que já é só a largura do card. No desktop (media
+   query abaixo) volta a empurrar o mapa, com largura fixa. */
+.station-sidebar {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    width: 100vw;
+    height: 100dvh;
+    background: #fff;
+    box-shadow: 0 -2px 16px rgb(0 0 0 / 0.12);
+    transform: translateX(100%);
+    transition: transform 0.25s ease-out;
+}
+
+.station-sidebar[data-open='true'] {
+    transform: translateX(0);
+}
+
+.station-sidebar-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: max(1.25rem, calc(env(safe-area-inset-top) + 0.6rem)) 1.25rem 1.25rem;
+}
+
+@media (min-width: 860px) {
+    /* Empurra o mapa em vez de flutuar por cima — sobra tela para os dois.
+       width:0 e overflow:hidden fecham; a largura fixa por dentro garante que
+       o card nunca aparece espremido a meio caminho da transição. */
+    .station-sidebar {
+        position: static;
+        inset: auto;
+        z-index: auto;
+        width: 0;
+        height: auto;
+        flex: none;
+        overflow: hidden;
+        border-left: 1px solid var(--rule);
+        box-shadow: -4px 0 16px rgb(0 0 0 / 0.12);
+        transform: none;
+        transition: width 0.25s ease-out;
+    }
+
+    .station-sidebar[data-open='true'] {
+        width: 24rem;
+    }
+
+    .station-sidebar-inner {
+        width: 24rem;
+    }
+}
+
+/* O pin é só o ponto, centrado na área de toque: sem caixa, sem fundo, sem
+   sombra do Leaflet. */
 .station-pin {
+    display: grid;
+    place-items: center;
     background: none;
     border: 0;
 }
 
-.station-pin svg {
+/* Um ponto, quatro cores. São 238 estações no mapa: qualquer desenho maior que
+   isto vira mancha antes de virar informação. */
+.dot {
+    position: relative;
     display: block;
-    filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.35));
+    width: var(--dot-size);
+    height: var(--dot-size);
+    border-radius: 50%;
+    background: var(--dot);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
 }
 
-/* Estação sem leitura recua: o mapa tem 238 delas contra 4 com dado, e quem
-   está em risco precisa achar a que mede o rio dele, não o catálogo. */
-.station-pin--unmonitored {
+/* Quadrado, não círculo: relato de morador precisa ser distinguível do pin de
+   estação mesmo sem cor (daltonismo, impressão P&B) — a forma já diferencia,
+   antes mesmo da cor roxa entrar. */
+.report-marker {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    background: #7c3aed;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+.report-popup {
+    max-width: 220px;
+}
+
+.report-popup-kind {
+    margin-bottom: var(--sp-tight);
+    font-size: var(--fs-label);
+    font-weight: 600;
+    color: #7c3aed;
+}
+
+.report-popup-photo {
+    display: block;
+    width: 100%;
+    border-radius: 0.375rem;
+}
+
+.report-popup-date {
+    margin-top: var(--sp-tight);
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+/* Só os dois estados de risco pulsam. O movimento é o segundo canal do aviso:
+   a diferença de cor some no sol forte e no daltonismo, a de movimento não. */
+.station-pin--critical .dot::after,
+.station-pin--alert .dot::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--dot);
+    animation: dot-pulse 2s ease-out infinite;
+}
+
+@keyframes dot-pulse {
+    from {
+        opacity: 0.55;
+        transform: scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(3.4);
+    }
+}
+
+/* Sem o pulso, o disco fica parado do mesmo tamanho: some. */
+@media (prefers-reduced-motion: reduce) {
+    .station-pin--critical .dot::after,
+    .station-pin--alert .dot::after {
+        animation: none;
+    }
+}
+
+/* Estação de leitura velha ou sem cota recua: quem está em risco precisa achar
+   o ponto que mede o rio dele, não o que não tem o que dizer. */
+.station-pin--unknown {
     opacity: 0.55;
 }
 
-.station-pin--unmonitored:hover,
-.station-pin--unmonitored:focus {
+.station-pin--unknown:hover,
+.station-pin--unknown:focus {
     opacity: 1;
 }
 
-/* ---- Filtros ---- */
+/* ---- Dock ---- */
 
-.filters {
+.tools {
     width: max-content;
     max-width: calc(100vw - 1.5rem);
     font-size: var(--fs-label);
@@ -59,23 +205,117 @@
     color: var(--color-stone-700);
 }
 
-.filters-toggle {
+/* Uma barra só para os seis controles: estações, estilo do mapa, se localizar,
+   relatar, entender e apoiar. Espalhados por dois cantos, o polegar atravessava
+   a tela. */
+.dock {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    border-radius: 0.375rem;
+    gap: 0.15rem;
+    width: max-content;
+    border-radius: 999px;
     background: #fff;
-    padding: 0.45rem 0.6rem;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 0.28);
-    font: inherit;
-    font-weight: 600;
-    color: inherit;
+    padding: 0.25rem;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.28);
+}
+
+/* 44 px é o alvo de toque mínimo confortável — o app é usado com uma mão, com
+   pressa, e às vezes com a tela molhada. */
+.dock button {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    color: var(--color-stone-800);
     cursor: pointer;
+}
+
+.dock button:hover {
+    background: var(--color-stone-100);
+}
+
+.dock button:active {
+    background: var(--color-stone-200);
+}
+
+/* Escolha única entre poucas opções — painel pequeno pendurado no dock, não
+   modal: ver o mapa por trás ajuda a decidir o estilo. */
+.basemap-panel {
+    min-width: 15rem;
+    margin-top: var(--sp-group);
+    border-radius: 0.75rem;
+    background: #fff;
+    padding: var(--sp-tight);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.28);
+}
+
+.basemap-panel-title {
+    padding: var(--sp-group) var(--sp-section) var(--sp-tight);
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-stone-500);
+}
+
+.basemap-list {
+    list-style: none;
+}
+
+/* A miniatura é o ladrilho real da fonte — mostra a paleta do estilo, não só
+   o nome. */
+.basemap-item {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr auto;
+    align-items: center;
+    gap: var(--sp-group);
+    width: 100%;
+    min-height: 2.5rem;
+    border-radius: 0.5rem;
+    padding: var(--sp-hair) var(--sp-group);
+    font: inherit;
+    font-size: var(--fs-body);
+    font-weight: 600;
+    text-align: left;
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.basemap-item:hover {
+    background: var(--color-stone-100);
+}
+
+.basemap-preview {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.375rem;
+    object-fit: cover;
+    background: var(--color-stone-100);
+}
+
+.basemap-check {
+    flex: none;
+    color: var(--color-stone-800);
+    opacity: 0;
+}
+
+.basemap-item[aria-pressed='true'] .basemap-check {
+    opacity: 1;
+}
+
+/* ---- Filtros ---- */
+
+.filters-toggle {
+    position: relative;
 }
 
 /* Contagem do que está à vista: com o painel fechado, é o que diz se algo foi
    escondido. */
 .filters-toggle em {
+    position: absolute;
+    top: 0;
+    right: 0;
     border-radius: 999px;
     background: var(--color-stone-800);
     padding: 0.05rem 0.35rem;
@@ -85,90 +325,361 @@
     color: #fff;
 }
 
-.filters-toggle[aria-expanded='true'] {
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+/* ---- Modal de estações ----
+
+   No celular, tela cheia: é o painel de controle das 55 estações, precisa do
+   espaço inteiro numa tela pequena. No desktop (media query abaixo) volta a
+   ser um cartão centralizado, como os demais modais — sobra tela ao redor.
+   Reaproveita .report-head/.report-title/.report-close do Blade. */
+.stations {
+    margin: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    color: var(--ink);
 }
 
-.filters-panel {
-    border-radius: 0 0.375rem 0.375rem 0.375rem;
-    background: #fff;
-    padding: 0.25rem;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 0.28);
+/* display:flex precisa valer só com o dialog aberto — sem o [open], a regra
+   vence o "display:none" nativo do <dialog> fechado, e ele fica invisível mas
+   ainda no layout, roubando o scroll/zoom do mapa por baixo. Foi exatamente
+   esse o bug: fechar a modal "travava" o mapa. */
+.stations[open] {
+    display: flex;
+    flex-direction: column;
 }
 
-/* Coluna única, do mais grave ao menos. */
-.filters-list {
-    list-style: none;
+.stations::backdrop {
+    background: rgb(12 12 12 / 0.55);
 }
 
-.filters-list label {
-    display: grid;
-    grid-template-columns: auto 14px 1fr auto;
+/* Busca e chips ficam fora da rolagem — filtrar não deve exigir voltar ao
+   topo. */
+.stations-toolbar {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--sp-group);
+    border-bottom: 1px solid var(--rule);
+    padding: var(--sp-group) var(--sp-section);
+}
+
+.stations-search {
+    width: 100%;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.65rem;
+    font: inherit;
+    font-size: var(--fs-body);
+}
+
+.stations-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-tight);
+}
+
+/* Filtro de visualização — o que a busca e os chips escondem some só desta
+   lista, nunca do mapa. Visibilidade no mapa é o olho, em cada linha. */
+.chip {
+    display: flex;
     align-items: center;
-    gap: 0.4rem;
-    border-radius: 0.25rem;
-    padding: 0.3rem 0.4rem;
+    gap: 0.3rem;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 999px;
+    padding: 0.25rem 0.6rem;
+    font-size: var(--fs-label);
+    font-weight: 600;
+    color: var(--ink-soft);
     cursor: pointer;
 }
 
-.filters-list label:hover {
-    background: var(--color-stone-100);
+.chip[aria-pressed='true'] {
+    border-color: var(--color-stone-800);
+    background: var(--color-stone-800);
+    color: #fff;
 }
 
-.filters-list input {
-    width: 0.95rem;
-    height: 0.95rem;
-    margin: 0;
-    accent-color: #256abf;
-}
-
-.filters-list em {
+.chip em {
     font-style: normal;
     font-variant-numeric: tabular-nums;
+    opacity: 0.75;
+}
+
+/* flex:1 com min-height:0 é o que deixa só esta região rolar, mantendo o
+   cabeçalho e a barra de busca fixos — sem isso um flex item não encolhe
+   abaixo do conteúdo. */
+.stations-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--sp-tight);
+}
+
+.station-list,
+.station-group-rows {
+    list-style: none;
+}
+
+/* Um grupo por estado, do mais grave ao menos — a ordem da lista é a escala de
+   risco. Sem seta, sem recolher: busca e chips já filtram o que pesa. */
+.station-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-group);
+    padding: var(--sp-tight) var(--sp-group) var(--sp-hair);
+}
+
+.station-group-title {
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     color: var(--color-stone-500);
 }
 
-/* Desmarcado: a linha recua, mas o número segue legível — é ele que diz quantas
-   estações o filtro escondeu. */
-.filters-list input:not(:checked) ~ span {
+.station-group-title em {
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Oculta a categoria inteira no mapa de uma vez — o olho é o mesmo desenho da
+   linha individual, só menor, porque aqui o alcance é maior. */
+.station-group-toggle {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.station-group-toggle:hover {
+    background: var(--color-stone-100);
+}
+
+.station-group-toggle[aria-pressed='false'] {
+    color: var(--color-stone-300);
+}
+
+.station-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-hair);
+}
+
+/* O botão principal abre a estação no mapa: fecha o modal, centraliza e mostra
+   o card — é o mesmo card que abrir o pin direto, só que achado pelo nome. */
+.station-open {
+    display: grid;
+    grid-template-columns: 1.25rem 1fr auto;
+    align-items: center;
+    gap: var(--sp-group);
+    flex: 1;
+    min-width: 0;
+    border-radius: 0.5rem;
+    padding: var(--sp-tight) var(--sp-group);
+    font: inherit;
+    text-align: left;
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.station-open:hover {
+    background: var(--color-stone-100);
+}
+
+.station-open .dot {
+    justify-self: center;
+}
+
+.station-text {
+    display: block;
+    min-width: 0;
+}
+
+.station-name,
+.station-place {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.station-name {
+    font-size: var(--fs-body);
+    font-weight: 600;
+}
+
+.station-place {
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+.station-reading {
+    display: grid;
+    justify-items: end;
+    gap: 0.05rem;
+    white-space: nowrap;
+}
+
+.station-reading strong {
+    font-size: var(--fs-body);
+    font-variant-numeric: tabular-nums;
+    color: var(--status);
+}
+
+/* Separado do botão que abre: um leva ao mapa, o outro só liga/desliga a
+   estação nele — ações diferentes, controles diferentes. */
+.station-eye {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.station-eye:hover {
+    background: var(--color-stone-100);
+}
+
+.station-eye[aria-pressed='false'] {
+    color: var(--color-stone-300);
+}
+
+/* Desligada do mapa: o nome recua, mas o dado segue legível — é o que diz o
+   que ela media antes de ser escondida. */
+.station-row[data-visible='false'] .station-name {
     color: var(--color-stone-400);
     text-decoration: line-through;
 }
 
-.filters-list input:not(:checked) ~ svg {
-    opacity: 0.35;
+.station-row[data-visible='false'] .dot {
+    opacity: 0.3;
 }
 
-.map-credit {
-    font-size: 0.6rem;
-    color: var(--color-stone-500);
-    text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+/* No desktop sobra tela: volta a ser cartão centralizado, mais largo que alto,
+   em vez da tela cheia do celular — e a lista de cada grupo abre em duas
+   colunas, menos rolagem para as mesmas 55 estações. O cabeçalho do grupo fica
+   fora da grade, então segue ocupando a largura inteira das duas colunas. */
+@media (min-width: 860px) {
+    .stations {
+        margin: auto;
+        width: min(50rem, calc(100vw - 4rem));
+        max-width: none;
+        height: auto;
+        max-height: min(36rem, calc(100dvh - 4rem));
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+    }
+
+    .station-group-rows {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 var(--sp-group);
+    }
 }
 
-.map-credit a {
-    color: inherit;
-    text-decoration: underline;
+/* ---- Modal de doação ----
+
+   Mesma caixa do relato (.report-head/.report-title/.report-close, cabeçalho
+   fixo e corpo rolando por dentro) — conteúdo curto, mas o teclado do celular
+   não pode empurrar o botão de copiar para fora da tela. */
+.donate {
+    margin: auto;
+    width: min(22rem, calc(100vw - 1.5rem));
+    max-height: calc(100dvh - 2rem);
+    border: 0;
+    border-radius: 0.75rem;
+    padding: 0;
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+    color: var(--ink);
 }
 
-/* ---- Botões flutuantes (só no celular) ---- */
+.donate::backdrop {
+    background: rgb(12 12 12 / 0.55);
+}
 
-/* 44 px é o alvo de toque mínimo confortável — o app é usado com uma mão, com
-   pressa, e às vezes com a tela molhada. */
-.fab button {
-    display: grid;
-    place-items: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: 50%;
+.donate-body {
+    max-height: calc(100dvh - 8rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 1rem 1rem;
+}
+
+.donate-amounts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-tight);
+    margin-top: var(--sp-group);
+}
+
+.donate-custom {
+    display: block;
+    margin-top: var(--sp-group);
+}
+
+.donate-custom span {
+    display: block;
+    margin-bottom: var(--sp-hair);
+    font-size: var(--fs-label);
+    color: var(--ink-soft);
+}
+
+.donate-custom input {
+    width: 100%;
+    border: 1px solid var(--color-stone-300);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.6rem;
+    font: inherit;
+    font-size: var(--fs-body);
+}
+
+/* Fundo branco fixo: o QR precisa de contraste com a página por trás,
+   independente do tema. */
+.donate-qr {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--sp-section);
+}
+
+.donate-qr svg {
+    width: 100%;
+    max-width: 13rem;
+    height: auto;
+    border-radius: 0.5rem;
     background: #fff;
-    box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
-    color: var(--color-stone-800);
-    cursor: pointer;
 }
 
-.fab button:active {
-    background: var(--color-stone-100);
+/* ---- Legenda ---- */
+
+.legend {
+    display: grid;
+    gap: 0.5rem;
+    border-radius: 0.65rem;
+    background: rgb(255 255 255 / 0.92);
+    padding: 0.75rem 0.9rem;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+    font-size: var(--fs-body);
+    line-height: 1.2;
+    list-style: none;
+    color: var(--color-stone-700);
+}
+
+.legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
 }
 
 /* ---- Modal de relato com foto ----
@@ -177,33 +688,68 @@
    sentido à foto, e no desktop o GPS erra quilômetros — marcar no mapa deixa de
    ser refinamento e passa a ser o caminho normal. */
 
+/* No celular, tela cheia — o mapa de marcação e a foto pedem espaço, não um
+   cartão espremido. No desktop (media query abaixo) volta a ser centralizado. */
 .report {
-    margin: auto;
-    width: min(26rem, calc(100vw - 1.5rem));
-    max-height: calc(100dvh - 2rem);
+    margin: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
     border: 0;
-    border-radius: 0.75rem;
+    border-radius: 0;
     padding: 0;
-    box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
     font-size: var(--fs-body);
     line-height: 1.4;
     color: var(--ink);
+}
+
+/* display:flex só com o dialog aberto — mesma razão do .stations[open]: sem
+   o [open], a regra vence o display:none nativo do fechado e ele fica
+   invisível travando o mapa por baixo. */
+.report[open] {
+    display: flex;
+    flex-direction: column;
 }
 
 .report::backdrop {
     background: rgb(12 12 12 / 0.55);
 }
 
+@media (min-width: 860px) {
+    .report {
+        margin: auto;
+        width: min(26rem, calc(100vw - 1.5rem));
+        max-width: none;
+        height: auto;
+        max-height: calc(100dvh - 2rem);
+        border-radius: 0.75rem;
+        box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+    }
+}
+
+/* Em tela cheia no celular, o topo do dialog encosta na borda real do
+   aparelho — env(safe-area-inset-top) empurra o título para fora do
+   entalhe/ilha da câmera. max() mantém a mesma folga de antes onde não há
+   entalhe (o env() vale 0). */
 .report-head {
     position: relative;
     border-bottom: 1px solid var(--rule);
-    padding: 0.85rem 3rem 0.7rem 1rem;
+    padding: max(1.1rem, calc(env(safe-area-inset-top) + 0.6rem)) 3rem 0.7rem 1rem;
 }
 
 .report-title {
     font-size: var(--fs-title);
     font-weight: 600;
     line-height: 1.2;
+}
+
+/* Mesmo ícone do botão que abre esta modal — a modal precisa parecer o que
+   a abriu. */
+.stations-title {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-tight);
 }
 
 /* Vem antes de tudo: quem envia precisa saber que não é medição oficial. */
@@ -215,8 +761,8 @@
 
 .report-close {
     position: absolute;
-    top: 0.45rem;
-    right: 0.45rem;
+    top: max(0.45rem, env(safe-area-inset-top));
+    right: max(0.45rem, env(safe-area-inset-right));
     width: 2.25rem;
     height: 2.25rem;
     border-radius: 50%;
@@ -230,8 +776,31 @@
     background: var(--color-stone-100);
 }
 
+/* Depois de .report-close no arquivo: precisa vencer o top/right dele, não só
+   herdar. */
+.station-sidebar-close {
+    top: max(0.75rem, env(safe-area-inset-top));
+    right: max(0.75rem, env(safe-area-inset-right));
+    z-index: 1;
+}
+
+/* O card foi desenhado para a bolha do Leaflet, que tem sua própria área para
+   o X — aqui o X é nosso, flutuando por cima do conteúdo. Sem essa folga, o
+   nome comprido ou o selo de estado passam por baixo do botão. */
+#station-sidebar-body .card-head {
+    padding-right: 2.25rem;
+}
+
+/* flex:1 com min-height:0 é o que deixa só esta região rolar, mantendo o
+   cabeçalho fixo — sem isso um flex item não encolhe abaixo do conteúdo. Ser
+   flex-column por dentro é o que deixa o botão de enviar grudar no fim do
+   espaço (via margin-top:auto nele), em vez de sobrar branco embaixo quando o
+   formulário é curto para a tela cheia do celular. */
 .report-body {
-    max-height: calc(100dvh - 8rem);
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: 0 1rem 1rem;
@@ -333,8 +902,12 @@
     cursor: pointer;
 }
 
+/* flex:1 em vez de altura fixa: é o elemento com mais a ganhar do espaço
+   sobrando em tela cheia — mapa maior é ponto mais fácil de acertar. 11rem
+   vira só o mínimo, para não espremer demais quando o formulário é alto. */
 .report-map {
-    height: 11rem;
+    flex: 1;
+    min-height: 11rem;
     margin-top: var(--sp-group);
     border: 1px solid var(--color-stone-300);
     border-radius: 0.5rem;
@@ -374,9 +947,12 @@
     line-height: 1.4;
 }
 
+/* margin-top:auto consome todo o espaço livre acima — é o que gruda o botão
+   no fim da tela quando o formulário é curto, em vez de deixar branco embaixo. */
 .report-submit {
     width: 100%;
-    margin-top: var(--sp-group);
+    flex: none;
+    margin-top: auto;
     border-radius: 0.5rem;
     background: var(--color-stone-900);
     padding: 0.75rem;
@@ -396,17 +972,35 @@
 
 /* ---- Aviso de entrada ---- */
 
-.disclaimer {
+/* Mesma caixa para o aviso de entrada e o "sobre os dados". Rola por dentro em
+   vez de estourar a tela e esconder o botão que fecha. */
+.disclaimer,
+.about {
     margin: auto;
+    max-height: calc(100dvh - 2rem);
     width: min(24rem, calc(100vw - 2rem));
+    overflow-y: auto;
     border: 0;
     border-radius: 0.75rem;
     padding: 1.25rem;
     box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
 }
 
-.disclaimer::backdrop {
+.disclaimer::backdrop,
+.about::backdrop {
     background: rgb(12 12 12 / 0.55);
+}
+
+.disclaimer-head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+}
+
+.disclaimer-icon {
+    flex: none;
 }
 
 .disclaimer-title {
@@ -467,6 +1061,78 @@
     font-weight: 600;
     color: #fff;
     cursor: pointer;
+}
+
+/* ---- Sobre os dados ---- */
+
+.about-head {
+    position: relative;
+    padding-right: 2.5rem;
+}
+
+.about-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.about-head .report-close {
+    top: -0.35rem;
+    right: -0.35rem;
+}
+
+.about-eyebrow {
+    margin-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 0.5rem;
+    font-size: var(--fs-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-stone-500);
+}
+
+.about-text {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: var(--color-stone-700);
+}
+
+.about-text strong {
+    font-weight: 600;
+    color: var(--color-stone-900);
+}
+
+/* A contagem de cada fonte abre a linha: é ela que dá, de relance, a proporção
+   entre o que está catalogado e o que está medindo. */
+.about-sources {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    list-style: none;
+}
+
+.about-sources li {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr;
+    gap: 0.6rem;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--color-stone-600);
+}
+
+.about-sources strong {
+    font-size: 1rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--color-stone-900);
+}
+
+.about-sources b {
+    font-weight: 600;
+    color: var(--color-stone-800);
 }
 
 /* ---- Card da estação ----
@@ -596,7 +1262,7 @@
 }
 
 .band[data-zone='normal'] {
-    background: #e4f3e3;
+    background: #dfeaf6;
 }
 
 .band[data-zone='alert'] {
@@ -764,10 +1430,6 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--ink-soft);
-}
-
-.card-action {
-    margin-top: var(--sp-tight);
 }
 
 /* ---- Gráfico de 24 h ---- */
