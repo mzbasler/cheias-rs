@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Camera;
 use App\Models\Station;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -67,5 +68,35 @@ class MapPageTest extends TestCase
         ]);
 
         $this->assertCount(0, $this->get('/')->viewData('stations'));
+    }
+
+    /**
+     * Câmera nunca é uma estação — vive na própria tabela, publicada à parte
+     * de $stations independente de a estação correspondente ter leitura.
+     */
+    public function test_it_publishes_every_camera(): void
+    {
+        Camera::create([
+            'name' => 'Rio Paranhana — Igrejinha',
+            'latitude' => -29.5709,
+            'longitude' => -50.7942,
+            'stream_url' => 'https://cameraigrejinha.solutti.net/ponte2/',
+            'approximate' => false,
+        ]);
+
+        Camera::create([
+            'name' => 'Taquara/RS',
+            'latitude' => -29.6452036,
+            'longitude' => -50.7832169,
+            'stream_url' => 'https://camerataquara.solutti.net/corsan/',
+            'approximate' => true,
+        ]);
+
+        $cameras = $this->get('/')->viewData('cameras');
+
+        $this->assertCount(2, $cameras);
+        $this->assertSame('Rio Paranhana — Igrejinha', $cameras[0]['name']);
+        $this->assertFalse($cameras[0]['approximate']);
+        $this->assertTrue($cameras[1]['approximate']);
     }
 }

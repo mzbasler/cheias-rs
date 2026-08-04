@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Camera;
 use App\Models\Reading;
 use App\Models\Report;
 use App\Models\Setting;
@@ -67,21 +68,24 @@ class MapController extends Controller
                 'createdAt' => $report->created_at->toIso8601String(),
             ]);
 
+        // Câmera de projeto independente: nunca é uma estação (sem cota, sem
+        // leitura, muitas sem sequer corresponder a um ponto catalogado), por
+        // isso vive na própria tabela em vez de emprestar uma coluna de Station.
+        $cameras = Camera::all()
+            ->map(fn (Camera $camera): array => [
+                'name' => $camera->name,
+                'latitude' => $camera->latitude,
+                'longitude' => $camera->longitude,
+                'streamUrl' => $camera->stream_url,
+                'approximate' => $camera->approximate,
+            ]);
+
         $setting = Setting::current();
 
         return view('map', [
             'stations' => $stations,
             'reports' => $reports,
-            // Total do catálogo, para o aviso dizer quantas ficaram de fora por
-            // nunca terem reportado — sem isso, o número de estações no mapa
-            // pareceria o total, e não uma fração dele.
-            'catalogTotal' => Station::count(),
-            // Proveniência à vista no aviso de entrada: quantas estações cada
-            // fonte trouxe. Contado agora, nunca escrito à mão — número fixo em
-            // texto mente na primeira importação.
-            'sources' => Station::selectRaw('source, count(*) as total')
-                ->groupBy('source')
-                ->pluck('total', 'source'),
+            'cameras' => $cameras,
             // Chave vazia é estado válido: o botão de doação vira aviso de "não
             // configurado" em vez de gerar QR Code para lugar nenhum.
             'pix' => [
