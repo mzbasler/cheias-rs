@@ -399,8 +399,8 @@ const reports = JSON.parse(document.getElementById('reports-data').textContent);
 const cameras = JSON.parse(document.getElementById('cameras-data').textContent);
 
 const map = L.map('map', {
-    center: [-29.8, -53.2], // Rio Grande do Sul
-    zoom: 6,
+    center: [-29.9, -53.5], // Rio Grande do Sul
+    zoom: 7,
     zoomControl: false,
     // A atribuição sai da caixa padrão e entra num controle próprio — exigida pela
     // licença dos tiles, então muda de lugar, não desaparece.
