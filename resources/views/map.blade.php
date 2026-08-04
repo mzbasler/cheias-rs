@@ -85,73 +85,37 @@
         <div class="stations-body" id="stations-body"></div>
     </dialog>
 
-    {{-- O que o mapa mostra e quem mediu. As contagens vêm do banco: número
-         escrito à mão no texto vira mentira na primeira importação. --}}
+    {{-- Sobre + apoiar, uma modal só. Uma frase pra quem nunca ouviu falar do
+         projeto explicar a ideia — e o pedido de apoio é o conteúdo principal
+         da modal, não um rodapé discreto: é ele que paga o servidor. --}}
     <dialog id="about" class="about" aria-labelledby="about-title">
         <header class="about-head">
-            <h1 id="about-title" class="about-title">Sobre os dados</h1>
+            <h1 id="about-title" class="about-title">Sobre o projeto</h1>
             <form method="dialog">
                 <button class="report-close" aria-label="Fechar">&times;</button>
             </form>
         </header>
 
-        <p class="about-eyebrow">Cada ponto</p>
-
-        <p class="about-text">
-            Uma estação que mede o rio. O valor é a <strong>cota</strong>: altura da água em
-            metros a partir do zero da régua daquele ponto — não se compara com a de outra
-            estação.
+        <p class="about-lead">
+            Monitoramento colaborativo e independente do nível dos rios do Rio Grande do
+            Sul, em tempo real e de graça.
         </p>
 
-        <p class="about-text">
-            A cor sai da comparação com as cotas que o órgão publica para aquele ponto.
-            Cinza é falta de informação — sem leitura há mais de 3 h ou sem cota —, não rio
-            calmo.
-        </p>
-
-        <p class="about-eyebrow">As fontes</p>
-
-        <ul class="about-sources">
-            <li>
-                <strong>{{ $sources['snirh'] ?? 0 }}</strong>
-                <span><b>SNIRH/Hidroweb (ANA)</b> — catálogo das estações do RS, sem leitura.</span>
-            </li>
-            <li>
-                <strong>{{ $sources['sace'] ?? 0 }}</strong>
-                <span><b>SACE (SGB)</b> — a maior parte das leituras e das cotas.</span>
-            </li>
-            <li>
-                <strong>{{ $sources['sigdc'] ?? 0 }}</strong>
-                <span><b>SIGDC (Defesa Civil RS)</b> — pontos com leitura.</span>
-            </li>
-        </ul>
-
-        <p class="about-text">
-            No mapa, as <strong>{{ $stations->count() }}</strong> estações que têm leitura.
-            As outras <strong>{{ $catalogTotal - $stations->count() }}</strong> do catálogo
-            nunca reportaram e ficam de fora.
-        </p>
-
-        <form method="dialog">
-            <button class="disclaimer-button">Voltar ao mapa</button>
-        </form>
-    </dialog>
-
-    {{-- Doação por Pix. Sem chave configurada, o corpo vira aviso — nunca um QR
-         Code apontando para lugar nenhum. --}}
-    <dialog id="donate" class="donate" aria-labelledby="donate-title">
-        <header class="report-head">
-            <h1 id="donate-title" class="report-title">Apoiar o projeto</h1>
-            <form method="dialog">
-                <button class="report-close" aria-label="Fechar">&times;</button>
-            </form>
-        </header>
-
-        <div class="donate-body">
-            @if ($pix['key'])
-                <p class="about-text">
-                    Este site é mantido de forma independente, sem custo para quem usa. Se ele
-                    te ajudou, um Pix de qualquer valor ajuda a manter no ar.
+        @if ($pix['key'])
+            <div class="donate-panel">
+                <p class="donate-heading">
+                    <svg class="donate-heading-icon" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"
+                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 14h2a2 2 0 0 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 16"/>
+                        <path d="m14.45 13.39 5.05-4.694C20.196 8 21 6.85 21 5.75a2.75 2.75 0 0 0-4.797-1.837.276.276 0 0 1-.406 0A2.75 2.75 0 0 0 11 5.75c0 1.2.802 2.248 1.5 2.946L16 11.95"/>
+                        <path d="m2 15 6 6"/>
+                        <path d="m7 20 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a1 1 0 0 0-2.75-2.91"/>
+                    </svg>
+                    Apoie o projeto
+                </p>
+                <p class="donate-text">
+                    Sem patrocínio, sem anúncio — o servidor sai do bolso de quem fez. Um Pix
+                    de qualquer valor mantém o mapa no ar.
                 </p>
 
                 <div class="donate-amounts" id="donate-amounts" role="group" aria-label="Valor da doação">
@@ -169,7 +133,7 @@
 
                 <div class="donate-qr" id="donate-qr" hidden></div>
 
-                <button type="button" class="report-action" id="donate-copy" hidden>
+                <button type="button" class="report-action donate-copy-action" id="donate-copy" hidden>
                     <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
                         <rect x="8" y="8" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
                         <path d="M16 8V5.5A1.5 1.5 0 0014.5 4h-9A1.5 1.5 0 004 5.5v9A1.5 1.5 0 005.5 16H8"
@@ -179,10 +143,12 @@
                 </button>
 
                 <p id="donate-status" class="report-status" role="status" hidden></p>
-            @else
-                <p class="card-gap">Doações via Pix ainda não configuradas nesta instância.</p>
-            @endif
-        </div>
+            </div>
+        @endif
+
+        <form method="dialog">
+            <button class="disclaimer-button">Voltar ao mapa</button>
+        </form>
     </dialog>
 
     {{-- Dados fora do JavaScript: nome e cidade compõem o payload do QR Code,
@@ -260,9 +226,22 @@
         </div>
     </dialog>
 
+    {{-- Foto de relato ou vídeo de câmera: uma modal só para os dois, o JS decide
+         o miolo (img ou iframe) conforme o pin clicado. --}}
+    <dialog id="media" class="media" aria-labelledby="media-title">
+        <header class="media-head">
+            <h1 id="media-title" class="media-title"></h1>
+            <form method="dialog">
+                <button class="report-close" aria-label="Fechar">&times;</button>
+            </form>
+        </header>
+        <div class="media-body" id="media-body"></div>
+    </dialog>
+
     {{-- Dados fora do JavaScript: o navegador trata como texto, nunca como código. --}}
     <script type="application/json" id="stations-data">@json($stations)</script>
     <script type="application/json" id="reports-data">@json($reports)</script>
+    <script type="application/json" id="cameras-data">@json($cameras)</script>
 
 </body>
 </html>

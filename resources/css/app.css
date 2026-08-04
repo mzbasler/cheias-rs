@@ -94,6 +94,13 @@
     }
 }
 
+/* O ladrilho do estilo "Escuro" (CARTO dark_all) é quase preto puro — mesmo
+   ladrilho, rótulos e ruas intactos, só levanta o quanto de preto chega na
+   tela. */
+.basemap-tiles--dark {
+    filter: brightness(1.6) contrast(0.85);
+}
+
 /* O pin é só o ponto, centrado na área de toque: sem caixa, sem fundo, sem
    sombra do Leaflet. */
 .station-pin {
@@ -141,40 +148,28 @@
     background: var(--dot-bg);
 }
 
-/* Quadrado, não círculo: relato de morador precisa ser distinguível do pin de
-   estação mesmo sem cor (daltonismo, impressão P&B) — a forma já diferencia,
-   antes mesmo da cor roxa entrar. */
+/* Mesmo formato do pin de câmera (círculo, mesmo tamanho), mas com o roxo
+   de sempre — é o bg colorido que diferencia relato de morador de câmera de
+   terceiro (branca), o ícone branco por cima dos dois. */
 .report-marker {
     display: grid;
     place-items: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 6px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
     background: #7c3aed;
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
 }
 
-.report-popup {
-    max-width: 220px;
-}
-
-.report-popup-kind {
-    margin-bottom: var(--sp-tight);
-    font-size: var(--fs-label);
-    font-weight: 600;
-    color: #7c3aed;
-}
-
-.report-popup-photo {
-    display: block;
-    width: 100%;
-    border-radius: 0.375rem;
-}
-
-.report-popup-date {
-    margin-top: var(--sp-tight);
-    font-size: var(--fs-label);
-    color: var(--ink-soft);
+.camera-marker {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    color: #1f2937;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
 }
 
 /* Só os dois estados de risco pulsam. O movimento é o segundo canal do aviso:
@@ -269,7 +264,8 @@
 /* Escolha única entre poucas opções — painel pequeno pendurado no dock, não
    modal: ver o mapa por trás ajuda a decidir o estilo. */
 .basemap-panel {
-    min-width: 15rem;
+    width: max-content;
+    max-width: 19rem;
     margin-top: var(--sp-group);
     border-radius: 0.75rem;
     background: #fff;
@@ -291,18 +287,19 @@
 }
 
 /* A miniatura é o ladrilho real da fonte — mostra a paleta do estilo, não só
-   o nome. */
+   o nome, e grande o bastante pra paleta se reconhecer de relance: era 2.5rem
+   antes, pequena demais pra cumprir esse papel. */
 .basemap-item {
     display: grid;
-    grid-template-columns: 2.5rem 1fr auto;
+    grid-template-columns: 3.5rem 1fr auto;
     align-items: center;
     gap: var(--sp-group);
     width: 100%;
-    min-height: 2.5rem;
+    min-height: 3.5rem;
     border-radius: 0.5rem;
-    padding: var(--sp-hair) var(--sp-group);
+    padding: var(--sp-tight) var(--sp-group);
     font: inherit;
-    font-size: var(--fs-body);
+    font-size: 1rem;
     font-weight: 600;
     text-align: left;
     color: var(--ink);
@@ -314,9 +311,9 @@
 }
 
 .basemap-preview {
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 0.375rem;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 0.5rem;
     object-fit: cover;
     background: var(--color-stone-100);
 }
@@ -617,38 +614,20 @@
     }
 }
 
-/* ---- Modal de doação ----
-
-   Mesma caixa do relato (.report-head/.report-title/.report-close, cabeçalho
-   fixo e corpo rolando por dentro) — conteúdo curto, mas o teclado do celular
-   não pode empurrar o botão de copiar para fora da tela. */
-.donate {
-    margin: auto;
-    width: min(22rem, calc(100vw - 1.5rem));
-    max-height: calc(100dvh - 2rem);
-    border: 0;
-    border-radius: 0.75rem;
-    padding: 0;
-    box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
-    color: var(--ink);
-}
-
-.donate::backdrop {
-    background: rgb(12 12 12 / 0.55);
-}
-
-.donate-body {
-    max-height: calc(100dvh - 8rem);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 0 1rem 1rem;
-}
+/* ---- Doação por Pix (dentro da modal "Sobre o projeto") ---- */
 
 .donate-amounts {
     display: flex;
     flex-wrap: wrap;
     gap: var(--sp-tight);
     margin-top: var(--sp-group);
+}
+
+/* Maior que o chip padrão de filtro — aqui é o valor da doação, o elemento
+   mais importante do painel, não uma categoria pra ligar/desligar. */
+.donate-amounts .chip {
+    padding: 0.45rem 0.9rem;
+    font-size: 0.95rem;
 }
 
 .donate-custom {
@@ -709,26 +688,90 @@
     gap: 0.6rem;
 }
 
-/* Explica a seta uma vez só, separada das cores — a seta não é um sexto
-   status, é uma segunda leitura sobre qualquer um dos cinco. */
-.legend-trend {
+/* Cada item liga/desliga a categoria no mapa — o mesmo controle do botão de
+   grupo na lista de estações, só que morando na legenda. Reset de botão pra
+   herdar o layout de .legend li sem parecer um botão de formulário. */
+.legend-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    text-align: left;
+    color: inherit;
+    cursor: pointer;
+}
+
+/* Categoria oculta recua — mesma linguagem do pin no mapa e da linha da
+   lista de estações quando ocultos. */
+.legend-toggle[aria-pressed='false'] {
+    opacity: 0.45;
+}
+
+/* Rótulo curto (mesmo texto do selo da estação) + definição técnica embaixo
+   — a legenda define o termo, o selo só o nomeia. */
+.legend-text {
+    display: grid;
+    line-height: 1.35;
+}
+
+.legend-label {
+    font-weight: 600;
+    color: var(--color-stone-800);
+}
+
+.legend-description {
+    font-size: var(--fs-label);
+    color: var(--color-stone-500);
+}
+
+/* Cabeçalho da segunda seção da legenda — a seta não é um sexto status, é uma
+   segunda leitura sobre qualquer um dos cinco, por isso separa com uma régua
+   em vez de entrar na mesma lista sem aviso. */
+.legend-divider {
     margin-top: 0.15rem;
     padding-top: 0.5rem;
     border-top: 1px solid var(--rule);
-    flex-wrap: wrap;
+    justify-content: space-between;
     color: var(--color-stone-500);
     font-size: var(--fs-label);
 }
 
-.legend-trend .dot-arrow {
+.legend-divider span {
+    color: var(--color-stone-400);
+}
+
+/* Mesmo tamanho do swatch de cor (14px) — a seta ocupa o mesmo lugar que a
+   bolinha ocupava, o item de tendência lê como o mesmo tipo de linha. */
+.legend-icon {
     display: inline-grid;
-    width: 13px;
-    height: 13px;
+    place-items: center;
+    width: 14px;
+    height: 14px;
     color: var(--color-stone-700);
 }
 
-.legend-trend span {
-    margin-left: auto;
+.legend-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Emblema com fundo — miniatura do próprio pin (relato/câmera), não um ícone
+   solto como a seta de tendência: círculo, cor de fundo e sombra iguais ao
+   marcador real, e o SVG não estica pra encher a caixa toda. */
+.legend-icon--badge {
+    border-radius: 50%;
+    background: var(--icon-bg);
+    color: var(--icon-color);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+.legend-icon--badge svg {
+    width: 9px;
+    height: 9px;
 }
 
 /* ---- Modal de relato com foto ----
@@ -1130,58 +1173,51 @@
     right: -0.35rem;
 }
 
-.about-eyebrow {
-    margin-top: 1.1rem;
-    border-top: 1px solid var(--rule);
-    padding-top: 0.5rem;
-    font-size: var(--fs-eyebrow);
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--color-stone-500);
+/* Uma frase só, pra quem nunca ouviu falar do projeto — o resto da modal é o
+   pedido de apoio, não documentação técnica. */
+.about-lead {
+    margin-top: 0.75rem;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--color-stone-800);
 }
 
-.about-text {
-    margin-top: 0.5rem;
-    font-size: 0.8rem;
-    line-height: 1.55;
+/* O pedido de apoio é o conteúdo principal da modal, não um rodapé — painel
+   com fundo e borda próprios pra destacar do resto, maior que qualquer outro
+   texto aqui. É ele que paga o servidor. */
+.donate-panel {
+    margin-top: 1.1rem;
+    border: 1px solid var(--color-blue-200, #bcd7f5);
+    border-radius: 0.75rem;
+    background: var(--color-blue-50, #eef5fd);
+    padding: 1rem;
+}
+
+.donate-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--color-stone-900);
+}
+
+.donate-heading-icon {
+    flex: none;
+    color: var(--color-blue-600, #2a78d6);
+}
+
+.donate-text {
+    margin-top: 0.35rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
     color: var(--color-stone-700);
 }
 
-.about-text strong {
-    font-weight: 600;
-    color: var(--color-stone-900);
-}
-
-/* A contagem de cada fonte abre a linha: é ela que dá, de relance, a proporção
-   entre o que está catalogado e o que está medindo. */
-.about-sources {
-    display: grid;
-    gap: 0.5rem;
-    margin-top: 0.6rem;
-    list-style: none;
-}
-
-.about-sources li {
-    display: grid;
-    grid-template-columns: 2.2rem 1fr;
-    gap: 0.6rem;
-    font-size: 0.78rem;
-    line-height: 1.45;
-    color: var(--color-stone-600);
-}
-
-.about-sources strong {
-    font-size: 1rem;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-    color: var(--color-stone-900);
-}
-
-.about-sources b {
-    font-weight: 600;
-    color: var(--color-stone-800);
+.donate-copy-action {
+    width: 100%;
+    justify-content: center;
+    margin-top: 0.75rem;
 }
 
 /* ---- Card da estação ----
@@ -1521,6 +1557,74 @@
     margin-top: var(--sp-group);
     border-top: 1px solid var(--rule);
     padding-top: var(--sp-tight);
+    font-size: var(--fs-label);
+    color: var(--color-stone-500);
+}
+
+/* ---- Modal de mídia (foto de relato ou vídeo de câmera) ----
+   Um objeto só, cartão centrado sempre — não precisa da versão tela-cheia
+   dos modais com formulário/lista. Reaproveita .report-close do Blade,
+   mesmo padrão do .about-head. */
+.media {
+    margin: auto;
+    width: min(28rem, calc(100vw - 2rem));
+    border: 0;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+    color: var(--ink);
+}
+
+.media::backdrop {
+    background: rgb(12 12 12 / 0.55);
+}
+
+.media-head {
+    position: relative;
+    padding-right: 2.5rem;
+}
+
+.media-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.media-head .report-close {
+    top: -0.35rem;
+    right: -0.35rem;
+}
+
+.media-body {
+    margin-top: 0.75rem;
+}
+
+.media-photo {
+    display: block;
+    width: 100%;
+    border-radius: 0.5rem;
+}
+
+/* Stream ao vivo de terceiro: só carrega quando a modal abre — nunca
+   precarregado atrás de um pin que ninguém clicou. */
+.media-player {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: #000;
+}
+
+.media-player iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+.media-caption {
+    margin-top: var(--sp-tight);
     font-size: var(--fs-label);
     color: var(--color-stone-500);
 }

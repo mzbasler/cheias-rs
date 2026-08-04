@@ -23,7 +23,7 @@ L.Icon.Default.mergeOptions({
  * cor. A cor não decide sozinha nos estados de risco — eles pulsam, e movimento
  * sobrevive ao daltonismo e ao sol forte, onde a diferença de matiz some.
  */
-const DOT_SIZE = 14;
+const DOT_SIZE = 22;
 
 /**
  * zIndexOffset separa a pilha por gravidade, não por posição na tela — sem
@@ -32,21 +32,50 @@ const DOT_SIZE = 14;
  * qualquer disputa de posição consegue vencer.
  */
 const STATUS = {
-    critical: { label: 'Inundação', color: '#d03b3b', zIndexOffset: 3000 },
-    alert: { label: 'Alerta', color: '#fab219', zIndexOffset: 2000 },
-    normal: { label: 'Normal', color: '#0ca30c', zIndexOffset: 1000 },
+    critical: {
+        label: 'Inundação',
+        description: 'nível ≥ cota de inundação',
+        color: '#d03b3b',
+        zIndexOffset: 3000,
+    },
+    alert: {
+        label: 'Alerta',
+        description: 'nível ≥ cota de alerta',
+        color: '#fab219',
+        zIndexOffset: 2000,
+    },
+    normal: {
+        label: 'Normal',
+        description: 'abaixo da cota de alerta',
+        color: '#0ca30c',
+        zIndexOffset: 1000,
+    },
     // Mede o rio corretamente, só não tem cota de referência publicada pra
     // classificar severidade — não é a mesma coisa que sensor mudo, e não pode
     // parecer um problema no ponto: azul, a cor de "dado real" no resto do
     // app, não mais uma variação de cinza.
-    unclassified: { label: 'Sem cota de referência', color: '#2a78d6', zIndexOffset: 500 },
+    unclassified: {
+        label: 'Sem cota de referência',
+        description: 'sem limiar de atenção/alerta publicado',
+        color: '#2a78d6',
+        zIndexOffset: 500,
+    },
     // No mapa, 'unknown' nunca é "nunca leu" — MapController já exclui quem
     // não tem nenhuma leitura. É sempre transmissão que ficou velha.
-    unknown: { label: 'Leitura desatualizada', color: '#8c8a85', zIndexOffset: 0 },
+    unknown: {
+        label: 'Leitura desatualizada',
+        // Mesma janela de Station::STALE_AFTER_HOURS — não vem do backend
+        // porque é só um rótulo, não uma decisão tomada aqui.
+        description: 'sem medição há mais de 24 h',
+        color: '#8c8a85',
+        zIndexOffset: 0,
+    },
 };
 
-/** Categorias que começam ocultas: não informam nada, só teriam poluído o mapa. */
-const HIDDEN_BY_DEFAULT = new Set(['unknown']);
+/** Categorias que começam ocultas: o mapa existe pra sinalizar alerta e
+ *  inundação — por padrão só esses dois status decoram o mapa. Os demais
+ *  continuam no catálogo e na lista de estações, reexibíveis por lá. */
+const HIDDEN_BY_DEFAULT = new Set(['unknown', 'unclassified', 'normal']);
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
@@ -342,8 +371,32 @@ function popup(station) {
     `;
 }
 
+/** Player embutido do stream ao vivo — miolo da modal de mídia quando o
+ *  clique vem de um pin de câmera. */
+function cameraMedia(camera) {
+    const note = camera.approximate
+        ? 'projeto independente, não é medição oficial · localização aproximada (centro do município)'
+        : 'projeto independente, não é medição oficial';
+
+    return `
+        <div class="media-player">
+            <iframe src="${escape(camera.streamUrl)}" allow="autoplay" allowfullscreen title="Câmera ao vivo"></iframe>
+        </div>
+        <p class="media-caption">${note}</p>
+    `;
+}
+
+/** Miolo da modal de mídia quando o clique veio de um relato de morador. */
+function reportMedia(report) {
+    return `
+        <img class="media-photo" src="${report.photoUrl}" alt="Foto enviada por morador">
+        <p class="media-caption">Relato de morador · não é medição oficial · ${dateFormat.format(new Date(report.createdAt))}</p>
+    `;
+}
+
 const stations = JSON.parse(document.getElementById('stations-data').textContent);
 const reports = JSON.parse(document.getElementById('reports-data').textContent);
+const cameras = JSON.parse(document.getElementById('cameras-data').textContent);
 
 const map = L.map('map', {
     center: [-29.8, -53.2], // Rio Grande do Sul
@@ -382,20 +435,9 @@ const BASEMAPS = [
         url: 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png',
         subdomains: 'abcd',
         maxZoom: 19,
-    },
-    {
-        key: 'osm',
-        label: 'OpenStreetMap',
-        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        subdomains: 'abc',
-        maxZoom: 19,
-    },
-    {
-        key: 'topo',
-        label: 'Relevo',
-        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-        subdomains: 'abc',
-        maxZoom: 17,
+        // Tile original é quase preto puro — mesmo ladrilho (mantém rótulos e
+        // ruas), só suaviza o quanto de preto chega na tela.
+        className: 'basemap-tiles--dark',
     },
     {
         key: 'satellite',
@@ -427,6 +469,7 @@ function setBasemap(key) {
     basemapLayer = L.tileLayer(basemap.url, {
         subdomains: basemap.subdomains ?? 'abc',
         maxZoom: basemap.maxZoom,
+        className: basemap.className ?? '',
     }).addTo(map);
 
     activeBasemap = basemap;
@@ -449,6 +492,58 @@ const markersById = {};
 
 /** station.id -> station, para achar o dado a partir de um data-id no DOM. */
 const stationsById = Object.fromEntries(stations.map((station) => [station.id, station]));
+
+/**
+ * Visibilidade de uma estação no mapa e no controle que a reflete na lista —
+ * módulo, não fechado na IIFE da lista, porque a legenda (mais abaixo no
+ * arquivo) também precisa mexer nisso.
+ */
+function setStationVisible(id, show) {
+    const marker = markersById[id];
+    const row = document.querySelector(`.station-row[data-id="${id}"]`);
+
+    row.dataset.visible = String(show);
+    row.querySelector('.station-eye').setAttribute('aria-pressed', String(show));
+
+    if (show) {
+        stationsLayer.addLayer(marker);
+    } else {
+        stationsLayer.removeLayer(marker);
+    }
+}
+
+// Quantas estações estão à vista no mapa: sem isso não se sabe o que ficou
+// escondido depois de fechar a lista ou clicar na legenda.
+function refreshCount() {
+    document.getElementById('filters-count').textContent = stations.filter((station) =>
+        stationsLayer.hasLayer(markersById[station.id]),
+    ).length;
+}
+
+/**
+ * O botão de grupo da lista e o item da legenda são o mesmo controle em dois
+ * lugares — refletem juntos se toda a categoria está à vista, nunca podem
+ * discordar entre si.
+ */
+function syncGroupControls(key) {
+    const groupStations = stations.filter((station) => station.status === key);
+    const allVisible = groupStations.length > 0 && groupStations.every((station) => stationsLayer.hasLayer(markersById[station.id]));
+
+    document.querySelectorAll(`.group-toggle[data-status="${key}"]`).forEach((toggle) => {
+        toggle.setAttribute('aria-pressed', String(allVisible));
+    });
+}
+
+/** Oculta ou mostra a categoria inteira de uma vez — útil numa cheia, para
+ *  sumir com o que não informa nada e sobrar só o que importa. Chamado pelo
+ *  botão de grupo da lista e pelo clique na legenda — os dois fazem a mesma
+ *  coisa, só moram em lugares diferentes. */
+function setGroupVisible(key, show) {
+    stations.filter((station) => station.status === key).forEach((station) => setStationVisible(station.id, show));
+
+    syncGroupControls(key);
+    refreshCount();
+}
 
 const sidebar = document.getElementById('station-sidebar');
 const sidebarBody = document.getElementById('station-sidebar-body');
@@ -498,9 +593,9 @@ stations.forEach((station) => {
 
     markersById[station.id] = marker;
 
-    // 'unknown' (leitura desatualizada) começa oculta: pedido explícito, para
-    // não poluir o mapa com pontos que não informam nada agora. Continua tudo
-    // no catálogo — dá pra reexibir pela lista de estações — só não decora o
+    // 'unknown' e 'unclassified' começam ocultas: pedido explícito, para não
+    // poluir o mapa com pontos que não classificam risco. Continua tudo no
+    // catálogo — dá pra reexibir pela lista de estações — só não decora o
     // mapa por padrão.
     if (!HIDDEN_BY_DEFAULT.has(station.status)) {
         stationsLayer.addLayer(marker);
@@ -508,9 +603,11 @@ stations.forEach((station) => {
 });
 
 /**
- * Relato de morador é camada própria, nunca misturada com o pin de estação —
- * nem no ícone (quadrado, não círculo), nem no popup (aviso "não é medição
- * oficial" sempre visível), nem no grupo do Leaflet.
+ * Relato de morador é camada própria, separada da câmera: uma é foto parada
+ * de morador, a outra é vídeo ao vivo de terceiro — natureza diferente,
+ * liga/desliga diferente. Nenhuma das duas se mistura com o pin de estação:
+ * nem no ícone (quadrado ou círculo, nunca a bolinha de status), nem na
+ * modal que abre ao clicar (aviso "não é medição oficial" sempre visível).
  */
 const reportsLayer = L.layerGroup().addTo(map);
 
@@ -522,15 +619,14 @@ function reportIcon() {
         // código roda antes daquele const existir.
         html: `
             <span class="report-marker" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" stroke-width="2.3" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" stroke-width="2.1" stroke-linejoin="round">
                     <path d="M3 8.5A2.5 2.5 0 015.5 6h1.2l1-1.6A1 1 0 018.5 4h7a1 1 0 01.85.4L17.3 6h1.2A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z"/>
                     <circle cx="12" cy="12.5" r="3.4"/>
                 </svg>
             </span>
         `,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
-        popupAnchor: [0, -10],
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
     });
 }
 
@@ -541,15 +637,49 @@ reports.forEach((report) => {
         alt: 'Relato de morador',
     });
 
-    marker.bindPopup(`
-        <div class="report-popup">
-            <p class="report-popup-kind">Relato de morador · não é medição oficial</p>
-            <img class="report-popup-photo" src="${report.photoUrl}" alt="Foto enviada por morador">
-            <p class="report-popup-date">${dateFormat.format(new Date(report.createdAt))}</p>
-        </div>
-    `);
+    marker.on('click', () => openMediaModal(reportMedia(report), 'Relato de morador'));
 
     reportsLayer.addLayer(marker);
+});
+
+/**
+ * Câmera de projeto independente (Nível do Rio / Observatório Heller & Jung)
+ * apontando pro rio — nunca é uma estação, não tem cota nem leitura. Camada
+ * própria, ícone próprio (círculo, não o quadrado do relato): nem a cor de
+ * status, nem o roxo de queixa de morador — só a máquina fotográfica mesmo.
+ * Clicar abre o vídeo direto na modal de mídia, sem passo intermediário.
+ */
+const camerasLayer = L.layerGroup().addTo(map);
+
+function cameraIcon() {
+    return L.divIcon({
+        className: 'camera-pin',
+        // Mesmo desenho do ICON_CAMERA (definida mais abaixo) — duplicado
+        // aqui pela mesma razão do reportIcon(): este código roda antes
+        // daquele const existir.
+        html: `
+            <span class="camera-marker" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round">
+                    <path d="M3 8.5A2.5 2.5 0 015.5 6h1.2l1-1.6A1 1 0 018.5 4h7a1 1 0 01.85.4L17.3 6h1.2A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z"/>
+                    <circle cx="12" cy="12.5" r="3.4"/>
+                </svg>
+            </span>
+        `,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+    });
+}
+
+cameras.forEach((camera) => {
+    const marker = L.marker([camera.latitude, camera.longitude], {
+        icon: cameraIcon(),
+        title: `${camera.name} — câmera`,
+        alt: `${camera.name} — câmera`,
+    });
+
+    marker.on('click', () => openMediaModal(cameraMedia(camera), camera.name));
+
+    camerasLayer.addLayer(marker);
 });
 
 /**
@@ -586,7 +716,15 @@ function closeOnBackdropClick(dialog) {
 
 closeOnBackdropClick(document.getElementById('stations'));
 closeOnBackdropClick(document.getElementById('about'));
-closeOnBackdropClick(document.getElementById('donate'));
+closeOnBackdropClick(document.getElementById('media'));
+
+/** Abre a modal de mídia (foto de relato ou vídeo de câmera) com o miolo e o
+ *  título dados — mesma modal pros dois casos, só o conteúdo muda. */
+function openMediaModal(bodyHtml, title) {
+    document.getElementById('media-title').textContent = title;
+    document.getElementById('media-body').innerHTML = bodyHtml;
+    document.getElementById('media').showModal();
+}
 
 /** O botão de estações abre o modal — só o dock nasce como controle do Leaflet. */
 const tools = L.control({ position: 'topleft' });
@@ -637,7 +775,6 @@ tools.addTo(map);
     const body = document.getElementById('stations-body');
     const search = document.getElementById('stations-search');
     const chipsBar = document.getElementById('stations-chips');
-    const count = document.getElementById('filters-count');
 
     const normalize = (value) => value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
@@ -689,7 +826,7 @@ tools.addTo(map);
                         <li class="station-group" data-status="${group.key}">
                             <div class="station-group-head">
                                 <p class="station-group-title">${group.label} <em>${group.stations.length}</em></p>
-                                <button type="button" class="station-group-toggle" data-status="${group.key}"
+                                <button type="button" class="station-group-toggle group-toggle" data-status="${group.key}"
                                         aria-pressed="${!HIDDEN_BY_DEFAULT.has(group.key)}"
                                         aria-label="Mostrar ou ocultar ${group.label} no mapa"
                                         title="Mostrar/ocultar categoria no mapa">
@@ -750,55 +887,20 @@ tools.addTo(map);
         });
     });
 
-    // Quantas estações estão à vista no mapa: sem isso não se sabe o que ficou
-    // escondido depois de fechar o modal.
-    function refreshCount() {
-        count.textContent = stations.filter((station) => stationsLayer.hasLayer(markersById[station.id])).length;
-    }
-
-    function setStationVisible(id, show) {
-        const marker = markersById[id];
-        const row = body.querySelector(`.station-row[data-id="${id}"]`);
-
-        row.dataset.visible = String(show);
-        row.querySelector('.station-eye').setAttribute('aria-pressed', String(show));
-
-        if (show) {
-            stationsLayer.addLayer(marker);
-        } else {
-            stationsLayer.removeLayer(marker);
-        }
-    }
-
-    // O botão do grupo reflete se todas as estações dele estão à vista: clicar
-    // sempre inverte esse total, mesmo depois de toques individuais terem
-    // mudado algumas por baixo dele.
-    function refreshGroupToggle(groupLi) {
-        const rows = [...groupLi.querySelectorAll('.station-row')];
-        const allVisible = rows.every((row) => row.dataset.visible === 'true');
-
-        groupLi.querySelector('.station-group-toggle').setAttribute('aria-pressed', String(allVisible));
-    }
-
     body.querySelectorAll('.station-eye').forEach((eye) => {
         eye.addEventListener('click', () => {
             setStationVisible(eye.dataset.id, eye.getAttribute('aria-pressed') === 'false');
-            refreshGroupToggle(eye.closest('.station-group'));
+            syncGroupControls(eye.closest('.station-group').dataset.status);
             refreshCount();
         });
     });
 
     // Oculta ou mostra a categoria inteira de uma vez — útil numa cheia, para
-    // sumir com o que não informa nada e sobrar só o que importa.
+    // sumir com o que não informa nada e sobrar só o que importa. Mesmo botão
+    // que a legenda: setGroupVisible mantém os dois sincronizados.
     body.querySelectorAll('.station-group-toggle').forEach((toggle) => {
         toggle.addEventListener('click', () => {
-            const show = toggle.getAttribute('aria-pressed') === 'false';
-            const groupLi = toggle.closest('.station-group');
-
-            groupLi.querySelectorAll('.station-row').forEach((row) => setStationVisible(row.dataset.id, show));
-
-            toggle.setAttribute('aria-pressed', String(show));
-            refreshCount();
+            setGroupVisible(toggle.dataset.status, toggle.getAttribute('aria-pressed') === 'false');
         });
     });
 
@@ -809,7 +911,7 @@ tools.addTo(map);
 
             if (!stationsLayer.hasLayer(marker)) {
                 setStationVisible(id, true);
-                refreshGroupToggle(open.closest('.station-group'));
+                syncGroupControls(open.closest('.station-group').dataset.status);
                 refreshCount();
             }
 
@@ -839,9 +941,12 @@ function dockButton({ label, icon, onClick }) {
     return button;
 }
 
-const ICON_LAYERS =
-    '<path d="M12 3L21 8.5L12 14L3 8.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
-    '<path d="M3 13.5L12 19L21 13.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+// Ícone do Lucide (map) — o mapa dobrado, não pilha de camadas: o botão troca
+// o estilo do mapa, não liga/desliga uma camada de dado.
+const ICON_MAP_STYLE =
+    '<path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M15 5.764v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+    '<path d="M9 3.236v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>';
 
 /**
  * Estilo do mapa: painel pequeno pendurado no dock, não modal — é uma escolha
@@ -875,7 +980,7 @@ const ICON_LAYERS =
                     <li>
                         <button type="button" class="basemap-item" data-key="${basemap.key}"
                                 aria-pressed="${basemap.key === activeBasemap.key}">
-                            <img class="basemap-preview" src="${previewUrl(basemap)}" alt="" width="40" height="40" loading="lazy">
+                            <img class="basemap-preview" src="${previewUrl(basemap)}" alt="" width="56" height="56" loading="lazy">
                             <span class="basemap-label">${basemap.label}</span>
                             <svg class="basemap-check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                                 <path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -897,7 +1002,7 @@ const ICON_LAYERS =
 
     dockButton({
         label: 'Estilo do mapa',
-        icon: ICON_LAYERS,
+        icon: ICON_MAP_STYLE,
         onClick: () => {
             panel.hidden = !panel.hidden;
         },
@@ -950,6 +1055,34 @@ const ICON_MINIMIZE =
     });
 }
 
+/**
+ * Relato e câmera são camadas separadas na legenda — uma é foto parada de
+ * morador, a outra é vídeo ao vivo de terceiro, natureza diferente merece
+ * liga/desliga independente. O estado vive fora de legend.onAdd porque esse
+ * callback reconstrói o container do zero toda vez que a legenda é escondida
+ * e trazida de volta (botão "Legenda" do dock).
+ */
+const mediaToggles = [
+    {
+        id: 'legend-reports-toggle',
+        layer: reportsLayer,
+        visible: true,
+        background: '#7c3aed',
+        iconColor: '#fff',
+        label: 'Relatos',
+        description: 'foto de morador',
+    },
+    {
+        id: 'legend-cameras-toggle',
+        layer: camerasLayer,
+        visible: true,
+        background: '#fff',
+        iconColor: '#1f2937',
+        label: 'Câmeras',
+        description: 'vídeo ao vivo de projeto independente',
+    },
+];
+
 /** O que cada cor quer dizer. Sempre à vista: ler o mapa não pode depender de
  *  abrir o filtro nem de lembrar da convenção. */
 const legend = L.control({ position: 'bottomleft' });
@@ -957,22 +1090,89 @@ const legend = L.control({ position: 'bottomleft' });
 legend.onAdd = () => {
     const container = L.DomUtil.create('ul', 'legend');
 
+    // Cada item liga/desliga a categoria no mapa — mesmo controle do botão de
+    // grupo na lista de estações, os dois chamam setGroupVisible.
     const statusItems = Object.entries(STATUS)
-        .map(([key, { label }]) => `<li>${swatch(key, 14)}${label}</li>`)
+        .map(
+            ([key, { label, description }]) => `
+                <li>
+                    <button type="button" class="legend-toggle group-toggle" data-status="${key}"
+                            aria-pressed="${!HIDDEN_BY_DEFAULT.has(key)}"
+                            aria-label="Mostrar ou ocultar ${label} no mapa" title="Mostrar/ocultar no mapa">
+                        ${swatch(key, 14)}
+                        <span class="legend-text">
+                            <span class="legend-label">${label}</span>
+                            <span class="legend-description">${description}</span>
+                        </span>
+                    </button>
+                </li>
+            `,
+        )
         .join('');
 
-    // A seta é a mesma em qualquer cor — uma linha só explica as três, em vez
-    // de repetir a legenda inteira com seta grudada em cada status.
-    const trendNote = `
-        <li class="legend-trend">
-            <i class="dot-arrow">${TREND_ARROW.up}</i> Subindo
-            <i class="dot-arrow">${TREND_ARROW.down}</i> Descendo
-            <i class="dot-arrow">${TREND_ARROW.stable}</i> Estável
-            <span>(24 h)</span>
-        </li>
-    `;
+    // Não é status de estação, mas liga e desliga como um — mesmo padrão
+    // visual da legenda, um item por camada (mediaToggles).
+    const mediaItems = mediaToggles
+        .map(
+            (item) => `
+                <li>
+                    <button type="button" class="legend-toggle" id="${item.id}" aria-pressed="${item.visible}"
+                            aria-label="Mostrar ou ocultar ${item.label.toLowerCase()} no mapa" title="Mostrar/ocultar ${item.label.toLowerCase()} no mapa">
+                        <span class="legend-icon legend-icon--badge" style="--icon-bg:${item.background};--icon-color:${item.iconColor}">
+                            <svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round">
+                                <path d="M3 8.5A2.5 2.5 0 015.5 6h1.2l1-1.6A1 1 0 018.5 4h7a1 1 0 01.85.4L17.3 6h1.2A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z"/>
+                                <circle cx="12" cy="12.5" r="3.4"/>
+                            </svg>
+                        </span>
+                        <span class="legend-text">
+                            <span class="legend-label">${item.label}</span>
+                            <span class="legend-description">${item.description}</span>
+                        </span>
+                    </button>
+                </li>
+            `,
+        )
+        .join('');
 
-    container.innerHTML = statusItems + trendNote;
+    // Mesmo padrão dos itens acima: um item por linha, ícone à esquerda,
+    // rótulo à direita — não uma legenda diferente colada embaixo.
+    const trendItems = [
+        ['up', 'Subindo'],
+        ['down', 'Descendo'],
+        ['stable', 'Estável'],
+    ]
+        .map(
+            ([direction, label]) => `
+                <li>
+                    <span class="legend-icon">${TREND_ARROW[direction]}</span>
+                    <span class="legend-label">${label}</span>
+                </li>
+            `,
+        )
+        .join('');
+
+    const trendNote = `<li class="legend-divider">Tendência <span>(24 h)</span></li>${trendItems}`;
+
+    container.innerHTML = statusItems + mediaItems + trendNote;
+
+    container.querySelectorAll('.legend-toggle[data-status]').forEach((toggle) => {
+        toggle.addEventListener('click', () => {
+            setGroupVisible(toggle.dataset.status, toggle.getAttribute('aria-pressed') === 'false');
+        });
+    });
+
+    mediaToggles.forEach((item) => {
+        container.querySelector(`#${item.id}`).addEventListener('click', (event) => {
+            item.visible = !item.visible;
+            event.currentTarget.setAttribute('aria-pressed', String(item.visible));
+
+            if (item.visible) {
+                item.layer.addTo(map);
+            } else {
+                item.layer.remove();
+            }
+        });
+    });
 
     L.DomEvent.disableClickPropagation(container);
 
@@ -980,6 +1180,31 @@ legend.onAdd = () => {
 };
 
 legend.addTo(map);
+
+const ICON_LAYERS =
+    '<path d="M12 3L21 8.5L12 14L3 8.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
+    '<path d="M3 13.5L12 19L21 13.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+
+/** Legenda começa visível (comportamento de sempre) — o botão só dá a opção
+ *  de tirá-la do caminho e trazer de volta, como o painel de estilo do mapa
+ *  e a lista de estações já fazem com o que mostram. */
+{
+    let legendVisible = true;
+
+    dockButton({
+        label: 'Legenda',
+        icon: ICON_LAYERS,
+        onClick: () => {
+            legendVisible = !legendVisible;
+
+            if (legendVisible) {
+                legend.addTo(map);
+            } else {
+                legend.remove();
+            }
+        },
+    });
+}
 
 /**
  * Telefone, não tablet. Ponteiro grosso já separa toque de mouse, mas tablet
@@ -1414,21 +1639,14 @@ const ICON_CAMERA =
     });
 }
 
-// Por último no dock, à direita dos demais: o que é um ponto e quem mediu é a
-// pergunta que segue a primeira olhada no mapa, não a primeira ação nele.
+// Por último no dock, à direita dos demais: o que é um ponto, quem mediu e
+// como apoiar é a pergunta que segue a primeira olhada no mapa, não a
+// primeira ação nele. Um botão só — "sobre" e "apoiar" viraram uma modal
+// única, contexto antes do pedido de apoio, não duas entradas pro mesmo tema.
 dockButton({
-    label: 'Sobre os dados',
+    label: 'Sobre o projeto',
     icon: ICON_INFO,
     onClick: () => toggleDialog(document.getElementById('about')),
-});
-
-const ICON_HEART =
-    '<path d="M12 20.2C7.8 17.4 3 13.4 3 8.9 3 6.2 5.1 4 7.7 4c1.7 0 3.2.9 4.3 2.3C13.1 4.9 14.6 4 16.3 4 18.9 4 21 6.2 21 8.9c0 4.5-4.8 8.5-9 11.3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>';
-
-dockButton({
-    label: 'Apoiar o projeto',
-    icon: ICON_HEART,
-    onClick: () => toggleDialog(document.getElementById('donate')),
 });
 
 /* ---- Doação por Pix -------------------------------------------------------

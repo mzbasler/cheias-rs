@@ -2,10 +2,7 @@
 
 Sistema de monitoramento de nível de rios e alerta de cheias no Rio Grande do Sul.
 
-> ⚠️ **Em migração.** O protótipo estático anterior (`index.html`, cobrindo os 4 pontos de
-> medição de Eldorado do Sul via SIGDC) foi descontinuado nesta branch. O projeto está
-> sendo reconstruído como aplicação Laravel — nome do app: **`cheias-rs`** — com escopo
-> ampliado para o estado inteiro.
+**Em produção:** https://nivel-rios-eldorado-production.up.railway.app
 
 ## O que é um ponto no mapa
 
@@ -19,9 +16,27 @@ diferentes não se compara — 4,20 m em Encantado e 4,20 m em Montenegro não d
 coisa. O que dá sentido ao valor são as **cotas de referência** publicadas pela fonte
 (atenção, alerta e inundação); é a comparação com elas que define a cor do ponto.
 
-Estação sem leitura, com leitura mais velha que 3 h, ou sem cota publicada aparece como
-_sem leitura_ — nunca como normal. Sensor mudo durante uma cheia não pode parecer rio
-calmo.
+O status de uma estação é sempre um destes cinco:
+
+| Status | Cor do ponto | Significa |
+| --- | --- | --- |
+| Inundação | vermelho | leitura ≥ cota de inundação |
+| Alerta | amarelo | leitura ≥ cota de alerta |
+| Normal | verde | leitura fresca, abaixo da cota de alerta |
+| Sem cota de referência | azul, sem preenchimento | leitura fresca, mas nenhuma fonte publicou cota de atenção/alerta pra essa estação — mede certo, não dá pra classificar risco |
+| Leitura desatualizada | cinza | sem medição há mais de 24 h — sensor mudo, nunca a mesma coisa que "rio normal" |
+
+O ponto também traz uma seta mostrando se o nível subiu, desceu ou ficou estável nas
+últimas 24 h. Por padrão, o mapa mostra só **Alerta** e **Inundação** — é um sistema de
+alerta, não um inventário; os outros três status ficam ocultos, reexibíveis clicando na
+legenda ou pela lista de estações.
+
+Relato de morador (foto + localização, pelo botão de câmera no mapa) e câmera de
+projeto independente (vídeo ao vivo de terceiro — hoje só as do
+[Nível do Rio](https://niveldorio.com), no Vale do Paranhana) são camadas
+completamente separadas da telemetria oficial — marcador próprio pra cada uma,
+liga/desliga direto pela legenda, nunca entram na mesma lista nem na mesma cor dos
+status de estação.
 
 ## Fontes de dados
 
@@ -44,11 +59,38 @@ catalogou; quando o código coincide, a leitura entra na estação existente em 
 uma duplicata a poucos metros dela no mapa — por isso a raspagem do SACE hoje só processa
 quem não tem esse código.
 
+Cota de referência (atenção/alerta/inundação) é definição da Defesa Civil **municipal**,
+não federal nem estadual — por isso a cobertura é parcial e fragmentada: só existe onde
+alguma prefeitura já fez e publicou esse levantamento. Não há hoje uma base pública única
+e sistemática pra todas as ~280 estações catalogadas no RS.
+
+Toda a ingestão roda sozinha em produção via `php artisan schedule:run`, disparado a cada
+5 minutos por um serviço de cron dedicado no Railway (`routes/console.php` define a
+cadência real de cada fonte — 15 min pra leitura, semanal pra catálogo).
+
+## Painel de administração
+
+Login em `/admin/login`. Cobre:
+
+- **Estações** — editar nome, cotas de referência e coordenadas, inclusive as sem leitura.
+- **Relatos de moradores** — aprovar/rejeitar, com a foto em tamanho maior antes e depois
+  de decidir.
+- **Saúde da ingestão** — quantas estações de cada fonte estão com leitura fresca ou
+  atrasada.
+- **Configurações** — chave Pix da doação, editável sem precisar de redeploy.
+
+Usuário criado via `php artisan admin:create-user {name} {email} {password}` — sem
+autorregistro público.
+
+A lista de câmeras (tabela `cameras`) ainda não tem tela própria no painel — é curada à
+mão via `php artisan tinker`, porque não existe nenhuma fonte que catalogue isso
+automaticamente.
+
 ## Stack
 
-Laravel 13 · PHP 8.3 · SQLite (desenvolvimento). O planejamento interno — catálogo de
-fontes de dados (ANA, SGB/SACE, CEMADEN, SEMA, INMET, Open-Meteo, SIGDC) e plano de
-migração — fica em `docs/`, fora do versionamento.
+Laravel 13 · PHP 8.3 · SQLite (desenvolvimento) · PostgreSQL (produção, Railway). Vanilla
+JS + Leaflet no mapa, sem framework de frontend. O planejamento interno — catálogo de
+fontes de dados e plano de migração — fica em `docs/`, fora do versionamento.
 
 ## Rodar localmente
 
@@ -61,4 +103,4 @@ composer run dev
 ## Licença
 
 Domínio público (CC0). Os dados pertencem aos respectivos órgãos públicos (ANA, SGB/CPRM,
-Defesa Civil RS, INMET, SEMA, entre outros).
+Defesa Civil RS, CEMADEN, entre outros).
