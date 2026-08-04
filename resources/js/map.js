@@ -806,7 +806,9 @@ tools.addTo(map);
     refreshCount();
 }
 
-/** Acrescenta um botão ao dock, à direita dos que já estão lá. */
+/** Acrescenta um botão ao dock, à direita dos que já estão lá. Devolve o
+ *  elemento para quem precisa atualizar ícone/rótulo depois (ex.: alternar
+ *  maximizar/minimizar conforme o estado muda por fora do próprio clique). */
 function dockButton({ label, icon, onClick }) {
     dockBar.insertAdjacentHTML(
         'beforeend',
@@ -815,7 +817,10 @@ function dockButton({ label, icon, onClick }) {
         </button>`,
     );
 
-    dockBar.lastElementChild.addEventListener('click', onClick);
+    const button = dockBar.lastElementChild;
+    button.addEventListener('click', onClick);
+
+    return button;
 }
 
 const ICON_LAYERS =
@@ -880,6 +885,52 @@ const ICON_LAYERS =
         onClick: () => {
             panel.hidden = !panel.hidden;
         },
+    });
+}
+
+const ICON_MAXIMIZE =
+    '<path d="M8 3H5a2 2 0 0 0-2 2v3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M21 8V5a2 2 0 0 0-2-2h-3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M3 16v3a2 2 0 0 0 2 2h3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M16 21h3a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>';
+
+const ICON_MINIMIZE =
+    '<path d="M8 3v3a2 2 0 0 1-2 2H3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M21 8h-3a2 2 0 0 1-2-2V3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M3 16h3a2 2 0 0 1 2 2v3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M16 21v-3a2 2 0 0 1 2-2h3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>';
+
+/**
+ * Tela cheia do documento inteiro, não só do mapa: dock e legenda continuam
+ * por cima, é a moldura do navegador que some. Sai pelo botão ou pelo Esc do
+ * próprio navegador — os dois precisam manter o ícone certo, por isso ouve
+ * 'fullscreenchange' em vez de só alternar no clique.
+ */
+{
+    const button = dockButton({
+        label: 'Tela cheia',
+        icon: ICON_MAXIMIZE,
+        onClick: () => {
+            // Navegador recusa por política própria de vez em quando (aba em
+            // segundo plano, restrição de iframe) — nesse caso não muda nada,
+            // não é erro para mostrar a quem só queria ver o mapa maior.
+            const request = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+
+            request.catch(() => {});
+        },
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+        const active = document.fullscreenElement !== null;
+
+        button.setAttribute('aria-label', active ? 'Sair da tela cheia' : 'Tela cheia');
+        button.title = active ? 'Sair da tela cheia' : 'Tela cheia';
+        button.querySelector('svg').innerHTML = active ? ICON_MINIMIZE : ICON_MAXIMIZE;
+
+        // O Leaflet mede o container só quando muda de tamanho por fora dele;
+        // sem isto o mapa ficava com a área antiga, cortado ou com moldura
+        // cinza sobrando até o próximo gesto de pan/zoom.
+        map.invalidateSize();
     });
 }
 
