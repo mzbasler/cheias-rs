@@ -16,6 +16,10 @@ class MapController extends Controller
 
     private const TREND_HOURS = 3;
 
+    /** Janela da seta de tendência no ponto do mapa — mais longa que a do
+     *  card porque decide algo visível de longe, não um número exato. */
+    private const DOT_TREND_HOURS = 24;
+
     public function __invoke(): View
     {
         // Só vai ao mapa quem tem leitura própria. As sem nenhuma são, na prática,
@@ -46,7 +50,8 @@ class MapController extends Controller
                 // O medidor precisa de um topo, e a fonte não informa o leito nem a
                 // margem do rio: usa-se o maior valor conhecido como referência.
                 'peak' => $station->recentReadings->max('value'),
-                'change' => $this->change($station->recentReadings),
+                'change' => $this->change($station->recentReadings, self::TREND_HOURS),
+                'dotTrend' => $this->change($station->recentReadings, self::DOT_TREND_HOURS),
                 'history' => $this->history($station->recentReadings),
             ]);
 
@@ -109,13 +114,13 @@ class MapController extends Controller
     }
 
     /**
-     * Variação nas últimas horas, para dizer se o rio sobe ou desce. Devolve
-     * null quando o histórico é curto demais para afirmar tendência.
+     * Variação nas últimas $hours horas, para dizer se o rio sobe ou desce.
+     * Devolve null quando o histórico é curto demais para afirmar tendência.
      *
      * @param  Collection<int, Reading>  $readings
      * @return array{value: float, hours: float}|null
      */
-    private function change(Collection $readings): ?array
+    private function change(Collection $readings, int $hours): ?array
     {
         $latest = $readings->last();
 
@@ -123,7 +128,7 @@ class MapController extends Controller
             return null;
         }
 
-        $target = $latest->measured_at->copy()->subHours(self::TREND_HOURS);
+        $target = $latest->measured_at->copy()->subHours($hours);
 
         $reference = $readings->last(fn (Reading $reading): bool => $reading->measured_at->lte($target))
             ?? $readings->first();
