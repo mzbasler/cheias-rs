@@ -32,10 +32,11 @@ alerta, não um inventário; os outros três status ficam ocultos, reexibíveis 
 legenda ou pela lista de estações.
 
 Relato de morador (foto + localização, pelo botão de câmera no mapa) e câmera de
-projeto independente (vídeo ao vivo de terceiro — hoje só as do
-[Nível do Rio](https://niveldorio.com), no Vale do Paranhana) são camadas
-completamente separadas da telemetria oficial — marcador próprio pra cada uma,
-liga/desliga direto pela legenda, nunca entram na mesma lista nem na mesma cor dos
+projeto independente (vídeo ao vivo de terceiro — hoje as do
+[Nível do Rio](https://niveldorio.com) e [Nível Guaíba](https://nivelguaiba.com.br), no
+Vale do Paranhana e nas bacias do Taquari e do Caí) são camadas completamente
+separadas da telemetria oficial — marcador próprio pra cada uma, liga/desliga direto
+pela legenda, nunca entram na mesma lista nem na mesma cor dos
 status de estação.
 
 ## Fontes de dados
