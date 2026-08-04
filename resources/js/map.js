@@ -19,6 +19,9 @@ const STATUS = {
     critical: { label: 'Inundação', color: '#d03b3b', zIndexOffset: 3000 },
     alert: { label: 'Alerta', color: '#fab219', zIndexOffset: 2000 },
     normal: { label: 'Normal', color: '#0ca30c', zIndexOffset: 1000 },
+    // Mede o rio corretamente, só não tem cota de referência publicada pra
+    // classificar severidade — não é a mesma coisa que sensor mudo.
+    unclassified: { label: 'Sem cota de referência', color: '#6b7684', zIndexOffset: 0 },
     unknown: { label: 'Sem leitura', color: '#8c8a85', zIndexOffset: 0 },
 };
 

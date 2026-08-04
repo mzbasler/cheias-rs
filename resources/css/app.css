@@ -186,12 +186,15 @@
 
 /* Estação de leitura velha ou sem cota recua: quem está em risco precisa achar
    o ponto que mede o rio dele, não o que não tem o que dizer. */
-.station-pin--unknown {
+.station-pin--unknown,
+.station-pin--unclassified {
     opacity: 0.55;
 }
 
 .station-pin--unknown:hover,
-.station-pin--unknown:focus {
+.station-pin--unknown:focus,
+.station-pin--unclassified:hover,
+.station-pin--unclassified:focus {
     opacity: 1;
 }
 

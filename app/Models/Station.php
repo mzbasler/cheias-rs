@@ -42,11 +42,12 @@ class Station extends Model
     }
 
     /**
-     * Estado do ponto: 'critical', 'alert', 'normal' ou 'unknown'.
+     * Estado do ponto: 'critical', 'alert', 'normal', 'unclassified' ou 'unknown'.
      *
-     * 'unknown' cobre tudo que impede afirmar algo sobre o rio — sem leitura,
-     * leitura velha, ou estação sem cota publicada. Nenhum desses casos pode
-     * ser apresentado como normal.
+     * 'unknown' é ausência de dado — sem leitura, ou leitura velha demais para
+     * valer. 'unclassified' é dado presente sem cota de referência publicada:
+     * a estação mede o rio corretamente, só não há contra o que comparar. Os
+     * dois nunca podem virar 'normal' por omissão.
      */
     public function status(): string
     {
@@ -66,7 +67,7 @@ class Station extends Model
             return 'alert';
         }
 
-        return $alertLevel === null && $this->critical_level === null ? 'unknown' : 'normal';
+        return $alertLevel === null && $this->critical_level === null ? 'unclassified' : 'normal';
     }
 
     /**
