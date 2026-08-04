@@ -32,6 +32,7 @@
     --status-critical: #d03b3b;
     --status-alert: #fab219;
     --status-normal: #0ca30c;
+    --status-unclassified: #2a78d6;
     --status-unknown: #8c8a85;
 }
 

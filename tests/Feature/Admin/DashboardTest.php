@@ -36,7 +36,7 @@ class DashboardTest extends TestCase
             'longitude' => -51,
             'unit' => 'm',
         ]);
-        $stale->readings()->create(['value' => 1, 'measured_at' => now()->subHours(10), 'source' => 'sigdc']);
+        $stale->readings()->create(['value' => 1, 'measured_at' => now()->subHours(30), 'source' => 'sigdc']);
 
         $response = $this->actingAs(User::factory()->create())->get('/admin');
 

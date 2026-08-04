@@ -9,11 +9,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class Station extends Model
 {
     /**
-     * Leitura mais velha que isto não representa mais o rio agora. Os sensores
-     * reportam a cada 15–30 min; 3 h cobre falhas curtas sem mascarar um sensor
-     * mudo durante uma cheia.
+     * Leitura mais velha que isto não representa mais o rio agora. Muitas
+     * estações da ANA/SGB reportam de hora em hora, com falhas curtas
+     * comuns; 24 h cobre isso sem marcar como desatualizada uma estação que
+     * só está um pouco atrasada.
      */
-    public const STALE_AFTER_HOURS = 3;
+    public const STALE_AFTER_HOURS = 24;
 
     /** Janela de histórico que o medidor usa para pico e variação. */
     public const HISTORY_HOURS = 48;
