@@ -941,6 +941,35 @@ function dockButton({ label, icon, onClick }) {
     return button;
 }
 
+/** Botão avulso, sozinho no próprio canto — não dividindo o dock principal
+ *  com os demais. Mesma pílula (.tools/.dock), controle Leaflet à parte. */
+function cornerButton(position, { label, icon, onClick }) {
+    const control = L.control({ position });
+
+    control.onAdd = () => {
+        const container = L.DomUtil.create('div', 'tools');
+
+        container.innerHTML = `
+            <div class="dock">
+                <button type="button" aria-label="${label}" title="${label}">
+                    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">${icon}</svg>
+                </button>
+            </div>
+        `;
+
+        container.querySelector('button').addEventListener('click', onClick);
+
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+
+        return container;
+    };
+
+    control.addTo(map);
+
+    return control;
+}
+
 // Ícone do Lucide (map) — o mapa dobrado, não pilha de camadas: o botão troca
 // o estilo do mapa, não liga/desliga uma camada de dado.
 const ICON_MAP_STYLE =
@@ -1195,20 +1224,10 @@ const ICON_LAYERS =
 {
     let legendVisible = true;
 
-    const layersControl = L.control({ position: 'bottomleft' });
-
-    layersControl.onAdd = () => {
-        const container = L.DomUtil.create('div', 'tools');
-
-        container.innerHTML = `
-            <div class="dock">
-                <button type="button" aria-label="Legenda" title="Legenda">
-                    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">${ICON_LAYERS}</svg>
-                </button>
-            </div>
-        `;
-
-        container.querySelector('button').addEventListener('click', () => {
+    cornerButton('bottomleft', {
+        label: 'Legenda',
+        icon: ICON_LAYERS,
+        onClick: () => {
             legendVisible = !legendVisible;
 
             if (legendVisible) {
@@ -1216,15 +1235,8 @@ const ICON_LAYERS =
             } else {
                 legend.remove();
             }
-        });
-
-        L.DomEvent.disableClickPropagation(container);
-        L.DomEvent.disableScrollPropagation(container);
-
-        return container;
-    };
-
-    layersControl.addTo(map);
+        },
+    });
 }
 
 /**
@@ -1286,7 +1298,7 @@ const ICON_CAMERA =
         giveUp = null;
     }
 
-    dockButton({
+    cornerButton('bottomright', {
         label: 'Ir para minha localização',
         icon: ICON_LOCATE,
         onClick: () => {
@@ -1458,7 +1470,7 @@ const ICON_CAMERA =
         });
     }
 
-    dockButton({
+    cornerButton('bottomright', {
         label: 'Enviar foto do rio',
         icon: ICON_CAMERA,
         onClick: () => {
