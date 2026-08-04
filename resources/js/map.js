@@ -24,8 +24,13 @@ const STATUS = {
     // parecer um problema no ponto: azul, a cor de "dado real" no resto do
     // app, não mais uma variação de cinza.
     unclassified: { label: 'Sem cota de referência', color: '#2a78d6', zIndexOffset: 500 },
-    unknown: { label: 'Sem leitura', color: '#8c8a85', zIndexOffset: 0 },
+    // No mapa, 'unknown' nunca é "nunca leu" — MapController já exclui quem
+    // não tem nenhuma leitura. É sempre transmissão que ficou velha.
+    unknown: { label: 'Leitura desatualizada', color: '#8c8a85', zIndexOffset: 0 },
 };
+
+/** Categorias que começam ocultas: não informam nada, só teriam poluído o mapa. */
+const HIDDEN_BY_DEFAULT = new Set(['unknown']);
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
@@ -426,11 +431,13 @@ stations.forEach((station) => {
 
     markersById[station.id] = marker;
 
-    // Todo status começa visível: 'unknown' cobre tanto "nunca teve leitura"
-    // quanto "leitura ficou velha" (Station::status()), e o segundo caso é
-    // exatamente o que não pode desaparecer numa cheia — fonte indisponível é
-    // estado visível, nunca lacuna silenciosa.
-    stationsLayer.addLayer(marker);
+    // 'unknown' (leitura desatualizada) começa oculta: pedido explícito, para
+    // não poluir o mapa com pontos que não informam nada agora. Continua tudo
+    // no catálogo — dá pra reexibir pela lista de estações — só não decora o
+    // mapa por padrão.
+    if (!HIDDEN_BY_DEFAULT.has(station.status)) {
+        stationsLayer.addLayer(marker);
+    }
 });
 
 /**
@@ -581,7 +588,7 @@ tools.addTo(map);
     function stationRow(group, station) {
         const place = [station.river, station.municipality].filter(Boolean).join(' · ');
         const { reading, unit } = station;
-        const visible = true;
+        const visible = !HIDDEN_BY_DEFAULT.has(group.key);
 
         searchIndex[station.id] = normalize(`${station.name} ${place}`);
 
@@ -616,7 +623,7 @@ tools.addTo(map);
                             <div class="station-group-head">
                                 <p class="station-group-title">${group.label} <em>${group.stations.length}</em></p>
                                 <button type="button" class="station-group-toggle" data-status="${group.key}"
-                                        aria-pressed="true"
+                                        aria-pressed="${!HIDDEN_BY_DEFAULT.has(group.key)}"
                                         aria-label="Mostrar ou ocultar ${group.label} no mapa"
                                         title="Mostrar/ocultar categoria no mapa">
                                     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">${EYE_ICON}</svg>
