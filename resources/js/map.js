@@ -1,6 +1,22 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import qrcode from 'qrcode-generator';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+/**
+ * O ícone padrão do Leaflet aponta pra um caminho relativo (images/marker-icon.png)
+ * que só existe no pacote fonte, não no build do Vite — sem isto, todo marcador
+ * sem ícone próprio (o pino arrastável do seletor de local do relato) aparecia
+ * quebrado. Reaponta pros arquivos reais, já passados pelo bundler.
+ */
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: markerIcon2x,
+    iconUrl: markerIcon,
+    shadowUrl: markerShadow,
+});
 
 /**
  * Uma peça só para os quatro estados: um ponto do mesmo diâmetro, que muda de
