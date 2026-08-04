@@ -25,18 +25,19 @@ calmo.
 
 ## Fontes de dados
 
-Retrato do banco em 3 de agosto de 2026 — 273 estações:
+Retrato do banco em 4 de agosto de 2026 — 295 estações:
 
 | Fonte | Estações | Papel |
 | --- | ---: | --- |
 | SNIRH / Hidroweb (ANA) | 238 | Inventário (`import:snirh`): catálogo das estações de rio, telemétricas e em operação no RS. Entra como localização e nome, sem leitura. |
 | ANA — Hidroweb Service (`import:ana`) | — | Leitura oficial (`import:ana`): API autenticada da própria ANA, mede a cota das estações que ela já catalogou. Substitui a raspagem do SACE para quem tem código no inventário. |
-| SACE (SGB, antigo CPRM) | 31 | Cobre só quem a ANA não cataloga (código próprio do SACE, sem correspondência no inventário) — e continua sendo a única fonte das cotas de referência (atenção/alerta/inundação), que a API da ANA não publica. Não tem API própria: é raspagem da página do mapa de níveis e de um CSV por estação. |
+| SACE (SGB, antigo CPRM) | 31 | Cobre só quem a ANA não cataloga (código próprio do SACE, sem correspondência no inventário) — e é uma das fontes das cotas de referência (atenção/alerta/inundação), que a API da ANA não publica. Não tem API própria: é raspagem da página do mapa de níveis e de um CSV por estação. Cobre só 4 bacias do RS (Taquari, Uruguai, Guaíba, Caí). |
+| CEMADEN (`import:cemaden`) | 15 | Outra fonte de cota de referência — publica atenção/alerta/transbordamento por estação hidrológica via JSON público, cobrindo bacias fora do alcance do SACE. Catálogo só: a API não confirma o offset do sensor no nível bruto que devolve, então essas estações ainda não têm leitura. |
 | SIGDC (Defesa Civil RS) | 4 | Pontos de monitoramento com leitura. |
 
 Só as estações com leitura registrada vão ao mapa — a maioria das 238 do inventário, mais
-as 31 do SACE e as 4 do SIGDC. As demais ficam de fora: estação catalogada sem medição
-viraria ruído sobre as que informam.
+as 31 do SACE e as 4 do SIGDC. As demais ficam de fora, incluindo as 15 do CEMADEN por
+enquanto: estação catalogada sem medição viraria ruído sobre as que informam.
 
 `import:ana` e o SACE medem, em parte, as mesmas estações que o inventário da ANA já
 catalogou; quando o código coincide, a leitura entra na estação existente em vez de criar

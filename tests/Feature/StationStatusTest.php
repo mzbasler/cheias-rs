@@ -63,8 +63,12 @@ class StationStatusTest extends TestCase
         $this->assertSame('unknown', $station->status());
     }
 
-    /** Sem cota publicada não há como afirmar que o nível está normal. */
-    public function test_fresh_reading_without_reference_levels_is_unknown(): void
+    /**
+     * Sem cota publicada não há como afirmar que o nível está normal — mas a
+     * leitura em si existe e é fresca, então não é o mesmo problema de sensor
+     * mudo ('unknown'): é 'unclassified', estação sem cota de referência.
+     */
+    public function test_fresh_reading_without_reference_levels_is_unclassified(): void
     {
         $station = $this->station([
             'attention_level' => null,
@@ -77,7 +81,7 @@ class StationStatusTest extends TestCase
             'source' => 'test',
         ]);
 
-        $this->assertSame('unknown', $station->fresh()->status());
+        $this->assertSame('unclassified', $station->fresh()->status());
     }
 
     /** @param  array<string, mixed>  $attributes */
