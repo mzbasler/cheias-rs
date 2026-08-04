@@ -683,9 +683,10 @@ cameras.forEach((camera) => {
 });
 
 /**
- * Dock: todos os controles do mapa numa barra só, no alto à esquerda. Espalhados
- * por dois cantos, o polegar precisava atravessar a tela para ir do filtro à
- * câmera.
+ * Dock: controles do mapa relacionados entre si (estações, estilo do mapa,
+ * tela cheia) numa barra só, no alto à esquerda. Legenda, localização, foto
+ * e sobre o projeto moram cada um sozinho no próprio canto (cornerButton),
+ * mais perto do que controlam ou do polegar de quem usa com uma mão.
  *
  * O botão de estações nasce aqui; os demais entram por dockButton(), na ordem
  * em que o arquivo os define.
@@ -1672,11 +1673,11 @@ const ICON_CAMERA =
     });
 }
 
-// Por último no dock, à direita dos demais: o que é um ponto, quem mediu e
-// como apoiar é a pergunta que segue a primeira olhada no mapa, não a
+// Canto superior direito, longe dos outros controles: o que é um ponto, quem
+// mediu e como apoiar é a pergunta que segue a primeira olhada no mapa, não a
 // primeira ação nele. Um botão só — "sobre" e "apoiar" viraram uma modal
 // única, contexto antes do pedido de apoio, não duas entradas pro mesmo tema.
-dockButton({
+cornerButton('topright', {
     label: 'Sobre o projeto',
     icon: ICON_INFO,
     onClick: () => toggleDialog(document.getElementById('about')),
