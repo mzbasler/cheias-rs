@@ -774,6 +774,36 @@
     height: 9px;
 }
 
+/* No celular a legenda flutua sobre o mapa, que é o conteúdo principal — sobra
+   menos tela ao redor do que no desktop, então compacta mais: menos respiro,
+   ícone e texto menores. */
+@media (max-width: 859px) {
+    .legend {
+        gap: 0.3rem;
+        padding: 0.5rem 0.65rem;
+        font-size: var(--fs-label);
+    }
+
+    .legend li {
+        gap: 0.4rem;
+    }
+
+    .legend .dot--swatch,
+    .legend .legend-icon {
+        width: 11px;
+        height: 11px;
+    }
+
+    .legend .legend-icon--badge svg {
+        width: 7px;
+        height: 7px;
+    }
+
+    .legend-description {
+        font-size: var(--fs-eyebrow);
+    }
+}
+
 /* ---- Modal de relato com foto ----
 
    O mapa é o campo principal, não acessório: a localização é o dado que dá
