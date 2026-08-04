@@ -17,3 +17,7 @@ Schedule::command('import:sace')->everyThirtyMinutes()->withoutOverlapping();
 
 // O inventário de estações é catálogo, não medição: muda em escala de meses.
 Schedule::command('import:snirh')->weeklyOn(1, '04:00')->withoutOverlapping();
+
+// Cota de referência também é catálogo, não medição — mesma cadência do
+// inventário da ANA, com uma hora de intervalo pra não disputar o scheduler.
+Schedule::command('import:cemaden')->weeklyOn(1, '05:00')->withoutOverlapping();
