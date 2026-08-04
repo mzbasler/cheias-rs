@@ -184,17 +184,15 @@
     }
 }
 
-/* Estação de leitura velha ou sem cota recua: quem está em risco precisa achar
-   o ponto que mede o rio dele, não o que não tem o que dizer. */
-.station-pin--unknown,
-.station-pin--unclassified {
+/* Só a estação sem dado nenhum recua: quem está em risco precisa achar o
+   ponto que mede o rio dele, não o que não tem o que dizer. A sem cota tem
+   leitura real — fica no mesmo plano visual das classificadas. */
+.station-pin--unknown {
     opacity: 0.55;
 }
 
 .station-pin--unknown:hover,
-.station-pin--unknown:focus,
-.station-pin--unclassified:hover,
-.station-pin--unclassified:focus {
+.station-pin--unknown:focus {
     opacity: 1;
 }
 

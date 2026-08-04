@@ -20,8 +20,10 @@ const STATUS = {
     alert: { label: 'Alerta', color: '#fab219', zIndexOffset: 2000 },
     normal: { label: 'Normal', color: '#0ca30c', zIndexOffset: 1000 },
     // Mede o rio corretamente, só não tem cota de referência publicada pra
-    // classificar severidade — não é a mesma coisa que sensor mudo.
-    unclassified: { label: 'Sem cota de referência', color: '#6b7684', zIndexOffset: 0 },
+    // classificar severidade — não é a mesma coisa que sensor mudo, e não pode
+    // parecer um problema no ponto: azul, a cor de "dado real" no resto do
+    // app, não mais uma variação de cinza.
+    unclassified: { label: 'Sem cota de referência', color: '#2a78d6', zIndexOffset: 500 },
     unknown: { label: 'Sem leitura', color: '#8c8a85', zIndexOffset: 0 },
 };
 
