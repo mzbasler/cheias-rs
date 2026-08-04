@@ -1185,16 +1185,30 @@ const ICON_LAYERS =
     '<path d="M12 3L21 8.5L12 14L3 8.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
     '<path d="M3 13.5L12 19L21 13.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
 
-/** Legenda começa visível (comportamento de sempre) — o botão só dá a opção
- *  de tirá-la do caminho e trazer de volta, como o painel de estilo do mapa
- *  e a lista de estações já fazem com o que mostram. */
+/**
+ * Botão de legenda mora no canto inferior esquerdo, junto da própria
+ * legenda — não lá em cima no dock, longe do que ele controla. Legenda
+ * começa visível; o botão só dá a opção de tirá-la do caminho e trazer de
+ * volta, como o painel de estilo do mapa e a lista de estações já fazem
+ * com o que mostram.
+ */
 {
     let legendVisible = true;
 
-    dockButton({
-        label: 'Legenda',
-        icon: ICON_LAYERS,
-        onClick: () => {
+    const layersControl = L.control({ position: 'bottomleft' });
+
+    layersControl.onAdd = () => {
+        const container = L.DomUtil.create('div', 'tools');
+
+        container.innerHTML = `
+            <div class="dock">
+                <button type="button" aria-label="Legenda" title="Legenda">
+                    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">${ICON_LAYERS}</svg>
+                </button>
+            </div>
+        `;
+
+        container.querySelector('button').addEventListener('click', () => {
             legendVisible = !legendVisible;
 
             if (legendVisible) {
@@ -1202,8 +1216,15 @@ const ICON_LAYERS =
             } else {
                 legend.remove();
             }
-        },
-    });
+        });
+
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+
+        return container;
+    };
+
+    layersControl.addTo(map);
 }
 
 /**
