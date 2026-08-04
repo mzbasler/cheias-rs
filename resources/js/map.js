@@ -54,12 +54,60 @@ const SOURCE_LABEL = {
 const number = (value, digits = 2) =>
     value.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-/** O mesmo ponto serve o mapa e a lista de filtros — só o tamanho muda. */
-function dot(status, size, label = '') {
+/**
+ * 'up', 'down', 'stable' ou null (histórico curto demais para afirmar
+ * tendência) — mesmo limiar de ruído do rótulo de tendência do card.
+ */
+function trendDirection(change) {
+    if (change === null) {
+        return null;
+    }
+
+    if (change.value > 0.005) {
+        return 'up';
+    }
+
+    if (change.value < -0.005) {
+        return 'down';
+    }
+
+    return 'stable';
+}
+
+/**
+ * Ícones do Lucide (arrow-up/arrow-down/minus), a mesma biblioteca do resto
+ * do app — traço fino, não triângulo sólido, para combinar com o ícone de
+ * olho da lista de estações em vez de destoar dele.
+ */
+const TREND_ARROW = {
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>',
+    stable: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>',
+};
+
+/**
+ * O marcador de uma estação real: fundo cheio da cor do status, seta branca
+ * por cima — mesmo padrão para os cinco status, sem exceção. Sem tendência
+ * ainda (histórico curto), a bola fica lisa, sem seta.
+ */
+function dot(status, size, trend = null, label = '') {
+    const { color } = STATUS[status] ?? STATUS.unknown;
+    const meaning = label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"';
+    const arrow = TREND_ARROW[trend] ?? '';
+    const style = `--dot-size:${size}px;--dot-bg:${color};--dot-arrow:#fff`;
+
+    return `<span class="dot" style="${style}" ${meaning}>${arrow ? `<i class="dot-arrow">${arrow}</i>` : ''}</span>`;
+}
+
+/**
+ * Swatch de categoria — legenda e chips de filtro não são uma estação real,
+ * então levam a cor cheia de sempre em vez da bola branca com seta.
+ */
+function swatch(status, size, label = '') {
     const { color } = STATUS[status] ?? STATUS.unknown;
     const meaning = label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"';
 
-    return `<span class="dot" style="--dot:${color};--dot-size:${size}px" ${meaning}></span>`;
+    return `<span class="dot dot--swatch" style="--dot-bg:${color};--dot-size:${size}px" ${meaning}></span>`;
 }
 
 /**
@@ -71,10 +119,13 @@ const HIT_AREA = 30;
 function icon(station) {
     const { status } = station;
     const { label } = STATUS[status] ?? STATUS.unknown;
+    // Leitura desatualizada não sustenta uma seta de tendência: o dado que
+    // faria essa conta já é o mesmo que está velho demais para confiar.
+    const trend = status === 'unknown' ? null : trendDirection(station.dotTrend);
 
     return L.divIcon({
         className: `station-pin station-pin--${status}`,
-        html: dot(status, DOT_SIZE, label),
+        html: dot(status, DOT_SIZE, trend, label),
         iconSize: [HIT_AREA, HIT_AREA],
         iconAnchor: [HIT_AREA / 2, HIT_AREA / 2],
         popupAnchor: [0, -DOT_SIZE / 2 - 2],
@@ -596,7 +647,7 @@ tools.addTo(map);
             <li class="station-row" data-id="${station.id}" data-status="${group.key}"
                 data-visible="${visible}" style="--status:${group.color}">
                 <button type="button" class="station-open" data-id="${station.id}">
-                    ${dot(group.key, 10)}
+                    ${dot(group.key, 10, group.key === 'unknown' ? null : trendDirection(station.dotTrend))}
                     <span class="station-text">
                         <span class="station-name">${escape(station.name)}</span>
                         ${place ? `<span class="station-place">${escape(place)}</span>` : ''}
@@ -644,7 +695,7 @@ tools.addTo(map);
         ...groups.map(
             (group) => `
                 <button type="button" class="chip" data-status="${group.key}" aria-pressed="false">
-                    ${dot(group.key, 8)} ${group.label} <em>${group.stations.length}</em>
+                    ${swatch(group.key, 8)} ${group.label} <em>${group.stations.length}</em>
                 </button>
             `,
         ),
@@ -839,9 +890,22 @@ const legend = L.control({ position: 'bottomleft' });
 legend.onAdd = () => {
     const container = L.DomUtil.create('ul', 'legend');
 
-    container.innerHTML = Object.entries(STATUS)
-        .map(([key, { label }]) => `<li>${dot(key, 14)}${label}</li>`)
+    const statusItems = Object.entries(STATUS)
+        .map(([key, { label }]) => `<li>${swatch(key, 14)}${label}</li>`)
         .join('');
+
+    // A seta é a mesma em qualquer cor — uma linha só explica as três, em vez
+    // de repetir a legenda inteira com seta grudada em cada status.
+    const trendNote = `
+        <li class="legend-trend">
+            <i class="dot-arrow">${TREND_ARROW.up}</i> Subindo
+            <i class="dot-arrow">${TREND_ARROW.down}</i> Descendo
+            <i class="dot-arrow">${TREND_ARROW.stable}</i> Estável
+            <span>(24 h)</span>
+        </li>
+    `;
+
+    container.innerHTML = statusItems + trendNote;
 
     L.DomEvent.disableClickPropagation(container);
 

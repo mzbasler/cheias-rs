@@ -103,16 +103,42 @@
     border: 0;
 }
 
-/* Um ponto, quatro cores. São 238 estações no mapa: qualquer desenho maior que
-   isto vira mancha antes de virar informação. */
+/* Sem borda — a cor mora no fundo (nos dois status de risco) ou na seta (nos
+   outros três), nunca nos dois ao mesmo tempo. São ~230 estações no mapa:
+   qualquer desenho maior que isto vira mancha antes de virar informação. */
 .dot {
     position: relative;
-    display: block;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
     width: var(--dot-size);
     height: var(--dot-size);
     border-radius: 50%;
-    background: var(--dot);
+    background: var(--dot-bg, #fff);
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+/* Ícone do Lucide (traço, não preenchido) em vez de glifo Unicode: centraliza
+   igual em qualquer plataforma, e ocupa a maior parte do círculo — é o
+   segundo canal do status (o primeiro é a cor), precisa ler de relance tanto
+   quanto ela. */
+.dot-arrow {
+    display: grid;
+    place-items: center;
+    width: 74%;
+    height: 74%;
+    color: var(--dot-arrow, var(--dot-bg));
+}
+
+.dot-arrow svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Swatch de categoria (legenda, chip): sempre a cor cheia, nunca a leitura de
+   uma estação de verdade — não é hora de saber se sobe ou desce. */
+.dot--swatch {
+    background: var(--dot-bg);
 }
 
 /* Quadrado, não círculo: relato de morador precisa ser distinguível do pin de
@@ -160,7 +186,7 @@
     z-index: -1;
     inset: 0;
     border-radius: 50%;
-    background: var(--dot);
+    background: var(--dot-bg);
     animation: dot-pulse 2s ease-out infinite;
 }
 
@@ -681,6 +707,28 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
+}
+
+/* Explica a seta uma vez só, separada das cores — a seta não é um sexto
+   status, é uma segunda leitura sobre qualquer um dos cinco. */
+.legend-trend {
+    margin-top: 0.15rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--rule);
+    flex-wrap: wrap;
+    color: var(--color-stone-500);
+    font-size: var(--fs-label);
+}
+
+.legend-trend .dot-arrow {
+    display: inline-grid;
+    width: 13px;
+    height: 13px;
+    color: var(--color-stone-700);
+}
+
+.legend-trend span {
+    margin-left: auto;
 }
 
 /* ---- Modal de relato com foto ----
